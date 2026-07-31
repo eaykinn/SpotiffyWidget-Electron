@@ -30,6 +30,8 @@ interface Props {
 const PAGE = 50
 
 type TrackPage = { items: Track[]; total: number; next: string | null }
+type ArtistPage = { items: Artist[]; total: number; next: string | null }
+type PlaylistPage = { items: Playlist[]; total: number; next: string | null }
 
 /** Survives tab switches so liked search / re-open doesn't re-download the whole library. */
 const likedSession: { tracks: Track[]; complete: boolean; total: number } = {
@@ -79,6 +81,28 @@ function mergeTracks(prev: Track[], batch: Track[]): Track[] {
     if (!key || seen.has(key)) continue
     seen.add(key)
     merged.push(t)
+  }
+  return merged
+}
+
+function mergeArtists(prev: Artist[], batch: Artist[]): Artist[] {
+  const seen = new Set(prev.map((a) => a.id))
+  const merged = [...prev]
+  for (const a of batch) {
+    if (!a.id || seen.has(a.id)) continue
+    seen.add(a.id)
+    merged.push(a)
+  }
+  return merged
+}
+
+function mergePlaylists(prev: Playlist[], batch: Playlist[]): Playlist[] {
+  const seen = new Set(prev.map((p) => p.id))
+  const merged = [...prev]
+  for (const p of batch) {
+    if (!p?.id || seen.has(p.id)) continue
+    seen.add(p.id)
+    merged.push(p)
   }
   return merged
 }
@@ -163,11 +187,15 @@ export default function Library({
     tab === 'tracks' &&
     !isLikedSearch &&
     (trackMode === 'liked' || trackMode === 'top' || Boolean(query.trim()))
+  const isArtistBrowse = detail.kind === 'none' && tab === 'artists'
+  const isPlaylistBrowse = detail.kind === 'none' && tab === 'playlists'
 
   const isPlaylistDetail = detail.kind === 'playlist'
   const mainHasMore = !mainComplete && mainOffset < mainTotal
   const detailHasMore = !detailComplete && detailOffset < detailTotal
-  const listHasMore = isPlaylistDetail ? detailHasMore : mainHasMore && isTrackBrowse
+  const listHasMore = isPlaylistDetail
+    ? detailHasMore
+    : mainHasMore && (isTrackBrowse || isArtistBrowse || isPlaylistBrowse)
 
   useEffect(() => {
     mainOffsetRef.current = mainOffset
@@ -220,6 +248,8 @@ export default function Library({
     setMainComplete(false)
     setLikedLibrary([])
     setTracks([])
+    setArtists([])
+    setPlaylists([])
   }, [])
 
   const browseKeyRef = useRef(`${tab}:${trackMode}:${detail.kind}`)
@@ -231,7 +261,7 @@ export default function Library({
     const browseKey = `${tab}:${trackMode}:${detail.kind}`
     if (browseKeyRef.current !== browseKey) {
       browseKeyRef.current = browseKey
-      if (tab === 'tracks') clearMainPaging()
+      if (tab === 'tracks' || tab === 'artists' || tab === 'playlists') clearMainPaging()
     }
     setListError(null)
 
@@ -314,6 +344,92 @@ export default function Library({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackMode, query, applyMainPage])
+
+  async function fetchArtistPage(offset: number): Promise<ArtistPage> {
+    if (query.trim()) {
+      const res = await spotify.searchPage(query.trim(), 'artist', PAGE, offset)
+      const paging = res.artists
+      return {
+        items: paging?.items ?? [],
+        total: paging?.total ?? 0,
+        next: paging?.next ?? null
+      }
+    }
+    return spotify.getTopArtistsPage(PAGE, offset)
+  }
+
+  const applyArtistPage = useCallback((page: ArtistPage, offset: number, replace: boolean): void => {
+    const nextOffset = offset + page.items.length
+    mainOffsetRef.current = nextOffset
+    setMainOffset(nextOffset)
+    setMainTotal(page.total)
+    const done = !page.next || page.items.length === 0 || nextOffset >= page.total
+    mainCompleteRef.current = done
+    setMainComplete(done)
+    setArtists((prev) => (replace ? page.items : mergeArtists(prev, page.items)))
+  }, [])
+
+  const appendArtistPage = useCallback(async (): Promise<void> => {
+    if (loadingMoreRef.current || mainCompleteRef.current) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    const gen = fetchGen.current
+    const offset = mainOffsetRef.current
+    try {
+      const page = await fetchArtistPage(offset)
+      if (gen !== fetchGen.current) return
+      applyArtistPage(page, offset, false)
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, applyArtistPage])
+
+  async function fetchPlaylistBrowsePage(offset: number): Promise<PlaylistPage> {
+    if (query.trim()) {
+      const res = await spotify.searchPage(query.trim(), 'playlist', PAGE, offset)
+      const paging = res.playlists
+      const items = (paging?.items ?? []).filter((p): p is Playlist => Boolean(p?.id))
+      return {
+        items,
+        total: paging?.total ?? 0,
+        next: paging?.next ?? null
+      }
+    }
+    return spotify.getPlaylistsPage(PAGE, offset)
+  }
+
+  const applyPlaylistBrowsePage = useCallback(
+    (page: PlaylistPage, offset: number, replace: boolean): void => {
+      const nextOffset = offset + page.items.length
+      mainOffsetRef.current = nextOffset
+      setMainOffset(nextOffset)
+      setMainTotal(page.total)
+      const done = !page.next || page.items.length === 0 || nextOffset >= page.total
+      mainCompleteRef.current = done
+      setMainComplete(done)
+      setPlaylists((prev) => (replace ? page.items : mergePlaylists(prev, page.items)))
+    },
+    []
+  )
+
+  const appendPlaylistBrowsePage = useCallback(async (): Promise<void> => {
+    if (loadingMoreRef.current || mainCompleteRef.current) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    const gen = fetchGen.current
+    const offset = mainOffsetRef.current
+    try {
+      const page = await fetchPlaylistBrowsePage(offset)
+      if (gen !== fetchGen.current) return
+      applyPlaylistBrowsePage(page, offset, false)
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, applyPlaylistBrowsePage])
 
   const appendPlaylistPage = useCallback(async (): Promise<void> => {
     const playlistId = detailPlaylistIdRef.current
@@ -434,23 +550,13 @@ export default function Library({
           await applyMainPage(page, 0, true, trackMode === 'liked' && !query.trim())
         }
       } else if (tab === 'artists') {
-        if (query.trim()) {
-          const res = await spotify.searchPage(query.trim(), 'artist', PAGE, 0)
-          if (gen !== fetchGen.current) return
-          setArtists(res.artists?.items ?? [])
-        } else {
-          const items = await spotify.getTopArtists(PAGE)
-          if (gen !== fetchGen.current) return
-          setArtists(items)
-        }
-      } else if (query.trim()) {
-        const res = await spotify.searchPage(query.trim(), 'playlist', PAGE, 0)
+        const page = await fetchArtistPage(0)
         if (gen !== fetchGen.current) return
-        setPlaylists(res.playlists?.items ?? [])
-      } else {
-        const items = await spotify.getPlaylists(PAGE)
+        applyArtistPage(page, 0, true)
+      } else if (tab === 'playlists') {
+        const page = await fetchPlaylistBrowsePage(0)
         if (gen !== fetchGen.current) return
-        setPlaylists(items)
+        applyPlaylistBrowsePage(page, 0, true)
       }
     } catch (err) {
       if (gen === fetchGen.current) {
@@ -479,6 +585,8 @@ export default function Library({
         if (!entries.some((e) => e.isIntersecting) || loadingMoreRef.current) return
         if (isPlaylistDetail) void appendPlaylistPage()
         else if (isTrackBrowse) void appendMainPage()
+        else if (isArtistBrowse) void appendArtistPage()
+        else if (isPlaylistBrowse) void appendPlaylistBrowsePage()
       },
       { root, rootMargin: '160px', threshold: 0 }
     )
@@ -488,9 +596,15 @@ export default function Library({
     listHasMore,
     isPlaylistDetail,
     isTrackBrowse,
+    isArtistBrowse,
+    isPlaylistBrowse,
     appendMainPage,
+    appendArtistPage,
+    appendPlaylistBrowsePage,
     appendPlaylistPage,
     tracks.length,
+    artists.length,
+    playlists.length,
     detailTracks.length,
     detail.kind
   ])
@@ -550,11 +664,14 @@ export default function Library({
 
   const searchPlaceholder = useMemo(() => {
     if (tab === 'tracks' && trackMode === 'liked') return 'Search liked songs…'
+    if (tab === 'artists') return 'Search all artists…'
+    if (tab === 'playlists') return 'Search all playlists…'
     return `Search ${tab}…`
   }, [tab, trackMode])
 
   const showSentinel =
-    (detail.kind === 'none' && isTrackBrowse) || detail.kind === 'playlist'
+    (detail.kind === 'none' && (isTrackBrowse || isArtistBrowse || isPlaylistBrowse)) ||
+    detail.kind === 'playlist'
 
   const statusLabel = useMemo(() => {
     if (loadingMore) return 'Loading more…'
@@ -562,13 +679,31 @@ export default function Library({
     if (detail.kind === 'playlist' && detailComplete && detailTotal > 0) {
       return `${detailTotal} tracks`
     }
-    if (trackMode === 'liked' && !query.trim() && mainComplete && mainTotal > 0) {
+    if (tab === 'artists' && !query.trim() && mainComplete && mainTotal > 0) {
+      return `${mainTotal} top artists`
+    }
+    if (tab === 'artists' && query.trim() && mainComplete && mainTotal > 0) {
+      return `${Math.min(artists.length, mainTotal)} of ${mainTotal}`
+    }
+    if (tab === 'playlists' && !query.trim() && mainComplete && mainTotal > 0) {
+      return `${mainTotal} playlists`
+    }
+    if (tab === 'playlists' && query.trim() && mainComplete && mainTotal > 0) {
+      return `${Math.min(playlists.length, mainTotal)} of ${mainTotal}`
+    }
+    if (tab === 'tracks' && trackMode === 'liked' && !query.trim() && mainComplete && mainTotal > 0) {
       return `${mainTotal} liked songs`
     }
-    if (trackMode === 'top' && !query.trim() && mainComplete && mainTotal > 0) {
+    if (tab === 'tracks' && trackMode === 'top' && !query.trim() && mainComplete && mainTotal > 0) {
       return `${mainTotal} top tracks`
     }
-    if (query.trim() && trackMode !== 'liked' && mainComplete && mainTotal > 0) {
+    if (
+      tab === 'tracks' &&
+      query.trim() &&
+      trackMode !== 'liked' &&
+      mainComplete &&
+      mainTotal > 0
+    ) {
       return `${Math.min(tracks.length, mainTotal)} of ${mainTotal}`
     }
     return null
@@ -578,11 +713,14 @@ export default function Library({
     detail.kind,
     detailComplete,
     detailTotal,
+    tab,
     trackMode,
     query,
     mainComplete,
     mainTotal,
-    tracks.length
+    tracks.length,
+    artists.length,
+    playlists.length
   ])
 
   const viewToggle = (
@@ -738,6 +876,28 @@ export default function Library({
             </button>
           </div>
         )}
+        {tab === 'artists' && (
+          <div className="segment segment--inline">
+            <button
+              className={!query.trim() ? 'active' : ''}
+              onClick={() => setQuery('')}
+              title="Your top artists"
+            >
+              Top
+            </button>
+          </div>
+        )}
+        {tab === 'playlists' && (
+          <div className="segment segment--inline">
+            <button
+              className={!query.trim() ? 'active' : ''}
+              onClick={() => setQuery('')}
+              title="Your playlists"
+            >
+              Mine
+            </button>
+          </div>
+        )}
         <input
           className="search search--compact"
           placeholder={searchPlaceholder}
@@ -765,7 +925,7 @@ export default function Library({
         {tab === 'tracks' &&
           !(loading && tracks.length === 0) &&
           renderTrackList(tracks, likedMap, showSentinel)}
-        {tab === 'artists' && !loading && (
+        {tab === 'artists' && !(loading && artists.length === 0) && (
           <div className={`list ${compact ? 'list--compact' : ''}`}>
             {artists.map((a) => (
               <button
@@ -776,14 +936,25 @@ export default function Library({
                 <img src={coverOf(a.images)} alt="" />
                 <div className="list-item__meta">
                   <div className="list-item__title">{a.name}</div>
-                  {!compact && <div className="list-item__sub">Artist</div>}
+                  {!compact && (
+                    <div className="list-item__sub">
+                      {query.trim() ? 'Artist' : 'Top artist'}
+                    </div>
+                  )}
                 </div>
               </button>
             ))}
-            {artists.length === 0 && !listError && <div className="empty">No artists</div>}
+            {artists.length === 0 && !listError && (
+              <div className="empty">{query.trim() ? 'No artists found' : 'No top artists'}</div>
+            )}
+            {showSentinel && (
+              <div ref={sentinelRef} className="list-sentinel">
+                {statusLabel && <span>{statusLabel}</span>}
+              </div>
+            )}
           </div>
         )}
-        {tab === 'playlists' && !loading && (
+        {tab === 'playlists' && !(loading && playlists.length === 0) && (
           <div className={`list ${compact ? 'list--compact' : ''}`}>
             {playlists.map((p) => (
               <button
@@ -798,7 +969,14 @@ export default function Library({
                 </div>
               </button>
             ))}
-            {playlists.length === 0 && !listError && <div className="empty">No playlists</div>}
+            {playlists.length === 0 && !listError && (
+              <div className="empty">{query.trim() ? 'No playlists found' : 'No playlists'}</div>
+            )}
+            {showSentinel && (
+              <div ref={sentinelRef} className="list-sentinel">
+                {statusLabel && <span>{statusLabel}</span>}
+              </div>
+            )}
           </div>
         )}
       </div>

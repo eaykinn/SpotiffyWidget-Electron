@@ -202,17 +202,42 @@ export const spotify = {
   },
 
   async getTopArtists(limit = 20, offset = 0): Promise<Artist[]> {
+    const page = await this.getTopArtistsPage(limit, offset)
+    return page.items
+  },
+
+  async getTopArtistsPage(
+    limit = 20,
+    offset = 0
+  ): Promise<{ items: Artist[]; total: number; next: string | null }> {
     const data = await request<Paging<Artist>>(
       `/me/top/artists?limit=${Math.min(limit, 50)}&offset=${offset}`
     )
-    return data?.items ?? []
+    return {
+      items: data?.items ?? [],
+      total: data?.total ?? 0,
+      next: data?.next ?? null
+    }
   },
 
   async getPlaylists(limit = 20, offset = 0): Promise<Playlist[]> {
-    const data = await request<Paging<Playlist>>(
+    const page = await this.getPlaylistsPage(limit, offset)
+    return page.items
+  },
+
+  async getPlaylistsPage(
+    limit = 20,
+    offset = 0
+  ): Promise<{ items: Playlist[]; total: number; next: string | null }> {
+    const data = await request<Paging<Playlist | null>>(
       `/me/playlists?limit=${Math.min(limit, 50)}&offset=${offset}`
     )
-    return data?.items ?? []
+    const items = (data?.items ?? []).filter((p): p is Playlist => Boolean(p?.id))
+    return {
+      items,
+      total: data?.total ?? 0,
+      next: data?.next ?? null
+    }
   },
 
   async search(q: string, type: 'track' | 'artist' | 'playlist'): Promise<SearchResponse> {
