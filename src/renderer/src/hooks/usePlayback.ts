@@ -6,6 +6,9 @@ import type { PlaybackState } from '../types/spotify'
 const POLL_PLAYING_MS = 5000
 /** Paused / idle: state rarely changes. */
 const POLL_IDLE_MS = 12000
+/** Spotify /me/player often returns stale progress right after seek. */
+const SEEK_GUARD_MS = 4000
+const SEEK_STALE_DRIFT_MS = 2000
 
 export function usePlayback(enabled: boolean) {
   const [playback, setPlayback] = useState<PlaybackState | null>(null)
@@ -14,10 +17,31 @@ export function usePlayback(enabled: boolean) {
   const lastServer = useRef(0)
   const refreshInFlight = useRef(false)
   const playbackRef = useRef<PlaybackState | null>(null)
+  const seekGuardUntil = useRef(0)
 
   useEffect(() => {
     playbackRef.current = playback
   }, [playback])
+
+  const applyProgressFromServer = useCallback((state: PlaybackState): PlaybackState => {
+    if (state.progress_ms == null) return state
+
+    const now = Date.now()
+    if (now < seekGuardUntil.current) {
+      const elapsed = state.is_playing ? now - lastServer.current : 0
+      const expected = localProgress.current + Math.max(0, elapsed)
+      if (Math.abs(state.progress_ms - expected) > SEEK_STALE_DRIFT_MS) {
+        // Keep optimistic seek position; still accept the rest of playback state.
+        return { ...state, progress_ms: Math.round(localProgress.current) }
+      }
+      // Server caught up — drop the guard early.
+      seekGuardUntil.current = 0
+    }
+
+    localProgress.current = state.progress_ms
+    lastServer.current = now
+    return state
+  }, [])
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!enabled || refreshInFlight.current) return
@@ -25,18 +49,18 @@ export function usePlayback(enabled: boolean) {
     refreshInFlight.current = true
     try {
       const state = await spotify.getPlayback()
-      setPlayback(state)
-      setError(null)
-      if (state?.progress_ms != null) {
-        localProgress.current = state.progress_ms
-        lastServer.current = Date.now()
+      if (state) {
+        setPlayback(applyProgressFromServer(state))
+      } else {
+        setPlayback(null)
       }
+      setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Playback error')
     } finally {
       refreshInFlight.current = false
     }
-  }, [enabled])
+  }, [enabled, applyProgressFromServer])
 
   // Adaptive poll: slower when idle, stopped while the window is hidden.
   useEffect(() => {
@@ -81,6 +105,11 @@ export function usePlayback(enabled: boolean) {
   const [progress, setProgress] = useState(0)
   useEffect(() => {
     if (!playback?.is_playing) {
+      // Prefer local clock during seek guard so paused scrub doesn't snap back.
+      if (Date.now() < seekGuardUntil.current) {
+        setProgress(localProgress.current)
+        return
+      }
       setProgress(playback?.progress_ms ?? 0)
       return
     }
@@ -116,10 +145,13 @@ export function usePlayback(enabled: boolean) {
   }
 
   const seek = async (ms: number): Promise<void> => {
-    await spotify.seek(ms)
+    // Optimistic first — Spotify often lags on /me/player after seek.
     localProgress.current = ms
     lastServer.current = Date.now()
+    seekGuardUntil.current = Date.now() + SEEK_GUARD_MS
     setProgress(ms)
+    setPlayback((prev) => (prev ? { ...prev, progress_ms: ms } : prev))
+    await spotify.seek(ms)
   }
 
   const toggleShuffle = async (): Promise<void> => {

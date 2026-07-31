@@ -8,6 +8,7 @@ import {
   nativeImage,
   powerMonitor,
   powerSaveBlocker,
+  screen,
   shell
 } from 'electron'
 import { dirname, join } from 'path'
@@ -27,7 +28,7 @@ for (const envPath of [
 
 const FULL_SIZE = { width: 450, height: 770 }
 const MINI_SIZE = { width: 380, height: 140 }
-const FULL_MIN = { width: 400, height: 650 }
+const FULL_MIN = { width: 400, height: 290 }
 const FULL_MAX = { width: 600, height: 900 }
 
 let mainWindow: BrowserWindow | null = null
@@ -37,7 +38,7 @@ let isQuitting = false
 let isMini = false
 let chromeRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let chromeRefreshing = false
-let saveSizeTimer: ReturnType<typeof setTimeout> | null = null
+let saveBoundsTimer: ReturnType<typeof setTimeout> | null = null
 
 function clampFullSize(width: number, height: number): { width: number; height: number } {
   return {
@@ -51,21 +52,72 @@ function getSavedFullSize(): { width: number; height: number } {
   return clampFullSize(s.windowWidth || FULL_SIZE.width, s.windowHeight || FULL_SIZE.height)
 }
 
-function persistFullSizeFromWindow(): void {
-  if (!mainWindow || mainWindow.isDestroyed() || isMini) return
-  const bounds = mainWindow.getBounds()
-  const { width, height } = clampFullSize(bounds.width, bounds.height)
-  const cur = getSettings()
-  if (cur.windowWidth === width && cur.windowHeight === height) return
-  setSettings({ windowWidth: width, windowHeight: height })
+/** Keep the window on a visible display (monitor unplugged, etc.). */
+function clampPosition(
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): { x: number; y: number } {
+  const displays = screen.getAllDisplays()
+  const overlaps = displays.some((d) => {
+    const a = d.workArea
+    return x < a.x + a.width && x + width > a.x && y < a.y + a.height && y + height > a.y
+  })
+  if (overlaps) return { x: Math.round(x), y: Math.round(y) }
+
+  const primary = screen.getPrimaryDisplay().workArea
+  return {
+    x: Math.round(primary.x + Math.max(0, (primary.width - width) / 2)),
+    y: Math.round(primary.y + Math.max(0, (primary.height - height) / 2))
+  }
 }
 
-function schedulePersistFullSize(): void {
-  if (isMini) return
-  if (saveSizeTimer) clearTimeout(saveSizeTimer)
-  saveSizeTimer = setTimeout(() => {
-    saveSizeTimer = null
-    persistFullSizeFromWindow()
+function getSavedPosition(width: number, height: number): { x: number; y: number } | null {
+  const s = getSettings()
+  if (typeof s.windowX !== 'number' || typeof s.windowY !== 'number') return null
+  return clampPosition(s.windowX, s.windowY, width, height)
+}
+
+function persistWindowBounds(options?: { size?: boolean; position?: boolean }): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const saveSize = options?.size !== false && !isMini
+  const savePos = options?.position !== false
+  if (!saveSize && !savePos) return
+
+  const bounds = mainWindow.getBounds()
+  const cur = getSettings()
+  const patch: Partial<AppSettings> = {}
+
+  if (saveSize) {
+    const { width, height } = clampFullSize(bounds.width, bounds.height)
+    if (cur.windowWidth !== width || cur.windowHeight !== height) {
+      patch.windowWidth = width
+      patch.windowHeight = height
+    }
+  }
+
+  if (savePos) {
+    const x = Math.round(bounds.x)
+    const y = Math.round(bounds.y)
+    if (cur.windowX !== x || cur.windowY !== y) {
+      patch.windowX = x
+      patch.windowY = y
+    }
+  }
+
+  if (Object.keys(patch).length > 0) setSettings(patch)
+}
+
+function persistFullSizeFromWindow(): void {
+  persistWindowBounds({ size: true, position: true })
+}
+
+function schedulePersistBounds(): void {
+  if (saveBoundsTimer) clearTimeout(saveBoundsTimer)
+  saveBoundsTimer = setTimeout(() => {
+    saveBoundsTimer = null
+    persistWindowBounds({ size: !isMini, position: true })
   }, 200)
 }
 
@@ -114,10 +166,12 @@ function scheduleChromeRefresh(): void {
 function createWindow(): void {
   const settings = getSettings()
   const size = getSavedFullSize()
+  const pos = getSavedPosition(size.width, size.height)
 
   mainWindow = new BrowserWindow({
     width: size.width,
     height: size.height,
+    ...(pos ? { x: pos.x, y: pos.y } : {}),
     minWidth: FULL_MIN.width,
     minHeight: FULL_MIN.height,
     maxWidth: FULL_MAX.width,
@@ -148,8 +202,10 @@ function createWindow(): void {
 
   mainWindow.on('blur', () => scheduleChromeRefresh())
   mainWindow.on('focus', () => scheduleChromeRefresh())
-  mainWindow.on('resized', () => schedulePersistFullSize())
-  mainWindow.on('resize', () => schedulePersistFullSize())
+  mainWindow.on('resized', () => schedulePersistBounds())
+  mainWindow.on('resize', () => schedulePersistBounds())
+  mainWindow.on('moved', () => schedulePersistBounds())
+  mainWindow.on('move', () => schedulePersistBounds())
 
   // WM_NCACTIVATE — DWM activation changes are what spawn the white frame
   if (process.platform === 'win32') {
@@ -248,8 +304,8 @@ function registerIpc(): void {
   ipcMain.handle('window:setMini', (_e, mini: boolean) => {
     if (!mainWindow) return
     if (mini) {
-      // Capture current full size before collapsing to mini
-      persistFullSizeFromWindow()
+      // Capture current full size + position before collapsing to mini
+      persistWindowBounds({ size: true, position: true })
       isMini = true
       mainWindow.setMinimumSize(MINI_SIZE.width, MINI_SIZE.height)
       mainWindow.setMaximumSize(MINI_SIZE.width, MINI_SIZE.height)
@@ -257,11 +313,16 @@ function registerIpc(): void {
       mainWindow.setResizable(false)
     } else {
       const size = getSavedFullSize()
+      const pos = getSavedPosition(size.width, size.height)
       isMini = false
       mainWindow.setResizable(true)
       mainWindow.setMinimumSize(FULL_MIN.width, FULL_MIN.height)
       mainWindow.setMaximumSize(FULL_MAX.width, FULL_MAX.height)
-      mainWindow.setSize(size.width, size.height)
+      if (pos) {
+        mainWindow.setBounds({ x: pos.x, y: pos.y, width: size.width, height: size.height })
+      } else {
+        mainWindow.setSize(size.width, size.height)
+      }
     }
   })
 

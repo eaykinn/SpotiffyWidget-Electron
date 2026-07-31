@@ -17,6 +17,9 @@ export interface AppSettings {
   /** Last full-player window size (restored after mini mode). */
   windowWidth: number
   windowHeight: number
+  /** Last window position on screen; null = let OS place it. */
+  windowX: number | null
+  windowY: number | null
 }
 
 const defaults: { tokens: Tokens; settings: AppSettings } = {
@@ -29,7 +32,9 @@ const defaults: { tokens: Tokens; settings: AppSettings } = {
     theme: 'dark',
     accentColor: '#1db954',
     windowWidth: 450,
-    windowHeight: 770
+    windowHeight: 770,
+    windowX: null,
+    windowY: null
   }
 }
 
