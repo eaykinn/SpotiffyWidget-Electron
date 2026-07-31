@@ -18,7 +18,7 @@ import { getSettings, setSettings, type AppSettings } from './store'
 loadEnv({ path: join(process.cwd(), '.env') })
 
 const FULL_SIZE = { width: 450, height: 770 }
-const MINI_SIZE = { width: 360, height: 130 }
+const MINI_SIZE = { width: 380, height: 140 }
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -42,7 +42,10 @@ function createWindow(): void {
     show: false,
     alwaysOnTop: settings.alwaysOnTop,
     skipTaskbar: true,
+    // Must be fully transparent so CSS border-radius can clip the window corners
     backgroundColor: '#00000000',
+    hasShadow: false,
+    roundedCorners: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -166,9 +169,12 @@ function registerIpc(): void {
     }
   })
 
-  ipcMain.handle('lyrics:fetch', async (_e, song: string, artist: string) => {
-    return fetchLyrics(song, artist)
-  })
+  ipcMain.handle(
+    'lyrics:fetch',
+    async (_e, song: string, artist: string, durationMs?: number) => {
+      return fetchLyrics(song, artist, durationMs)
+    }
+  )
 }
 
 function registerPowerHooks(): void {

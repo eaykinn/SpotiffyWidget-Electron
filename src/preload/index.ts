@@ -32,8 +32,8 @@ const api = {
     openSpotify: (): Promise<boolean> => ipcRenderer.invoke('shell:openSpotify')
   },
   lyrics: {
-    fetch: (song: string, artist: string): Promise<string> =>
-      ipcRenderer.invoke('lyrics:fetch', song, artist)
+    fetch: (song: string, artist: string, durationMs?: number): Promise<string> =>
+      ipcRenderer.invoke('lyrics:fetch', song, artist, durationMs)
   },
   onLock: (callback: () => void): (() => void) => {
     const handler = (): void => callback()

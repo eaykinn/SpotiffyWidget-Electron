@@ -8,7 +8,8 @@ import Settings from './components/Settings'
 import { IconClose, IconMini, IconSettings } from './components/Icons'
 import { usePlayback } from './hooks/usePlayback'
 
-type View = 'main' | 'settings' | 'lyrics'
+type View = 'main' | 'settings'
+type BottomPanel = 'library' | 'lyrics'
 
 interface ThemeSettings {
   theme: 'dark' | 'light'
@@ -21,17 +22,27 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null)
   const [mini, setMini] = useState(false)
   const [view, setView] = useState<View>('main')
+  const [bottom, setBottom] = useState<BottomPanel>('library')
   const [queueSignal, setQueueSignal] = useState(0)
   const [theme, setTheme] = useState<ThemeSettings>({ theme: 'dark', accentColor: '#1db954' })
 
   const playbackApi = usePlayback(authed && !booting)
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme.theme)
-    document.documentElement.style.setProperty('--accent', theme.accentColor)
-    document.documentElement.style.setProperty(
+    const root = document.documentElement
+    root.setAttribute('data-theme', theme.theme)
+    root.style.setProperty('--accent', theme.accentColor)
+    root.style.setProperty(
       '--accent-hover',
-      theme.accentColor === '#1db954' ? '#1ed760' : theme.accentColor
+      `color-mix(in srgb, ${theme.accentColor} 78%, white)`
+    )
+    root.style.setProperty(
+      '--accent-soft',
+      `color-mix(in srgb, ${theme.accentColor} 22%, transparent)`
+    )
+    root.style.setProperty(
+      '--accent-glow',
+      `color-mix(in srgb, ${theme.accentColor} 35%, transparent)`
     )
   }, [theme])
 
@@ -57,6 +68,9 @@ export default function App() {
       void spotify.pause().catch(() => undefined)
     })
   }, [])
+
+  // When track changes while lyrics are open, keep panel but refetch via Lyrics props
+  const track = playbackApi.playback?.item
 
   const enterMini = async (): Promise<void> => {
     await window.spotiffy.window.setMini(true)
@@ -124,14 +138,18 @@ export default function App() {
     return <MiniPlayer api={playbackApi} onExpand={() => void exitMini()} />
   }
 
-  const track = playbackApi.playback?.item
-
   return (
     <div className="app-shell">
       <div className="titlebar">
         <div className="titlebar__brand">Spotiffy</div>
         <div className="titlebar__actions">
-          <button onClick={() => setView('settings')} title="Settings">
+          <button
+            onClick={() => {
+              setView('settings')
+              setBottom('library')
+            }}
+            title="Settings"
+          >
             <IconSettings />
           </button>
           <button onClick={() => void enterMini()} title="Mini player">
@@ -144,29 +162,34 @@ export default function App() {
       </div>
 
       <div className="content">
-        {view === 'settings' && (
+        {view === 'settings' ? (
           <Settings
             onBack={() => setView('main')}
             onThemeChange={(s) => setTheme({ theme: s.theme, accentColor: s.accentColor })}
           />
-        )}
-
-        {view === 'lyrics' && track && (
-          <Lyrics
-            song={track.name}
-            artist={track.artists.map((a) => a.name).join(', ')}
-            onBack={() => setView('main')}
-          />
-        )}
-
-        {view === 'main' && (
+        ) : (
           <>
             <Player
               api={playbackApi}
-              onOpenLyrics={() => setView('lyrics')}
-              onOpenQueue={() => setQueueSignal((n) => n + 1)}
+              onOpenLyrics={() => {
+                if (track) setBottom('lyrics')
+              }}
+              onOpenQueue={() => {
+                setBottom('library')
+                setQueueSignal((n) => n + 1)
+              }}
             />
-            <Library onPlayTrack={playTrack} queueOpenSignal={queueSignal} />
+
+            {bottom === 'lyrics' && track ? (
+              <Lyrics
+                song={track.name}
+                artist={track.artists.map((a) => a.name).join(', ')}
+                durationMs={track.duration_ms}
+                onBack={() => setBottom('library')}
+              />
+            ) : (
+              <Library onPlayTrack={playTrack} queueOpenSignal={queueSignal} />
+            )}
           </>
         )}
       </div>

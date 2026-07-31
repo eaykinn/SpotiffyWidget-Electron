@@ -101,29 +101,31 @@ export default function Library({ onPlayTrack, queueOpenSignal }: Props) {
           : 'Queue'
 
     return (
-      <div className="scroll">
-        <button className="back-btn" onClick={() => setDetail({ kind: 'none' })}>
-          <IconBack /> Back
-        </button>
-        <h3 style={{ marginBottom: 10, fontFamily: 'var(--display)' }}>{title}</h3>
-        <div className="list">
-          {detailTracks.map((t) => (
-            <button key={t.id + t.uri} className="list-item" onClick={() => void onPlayTrack(t.uri)}>
-              <img src={coverOf(t.album?.images)} alt="" />
-              <div className="list-item__meta">
-                <div className="list-item__title">{t.name}</div>
-                <div className="list-item__sub">{t.artists.map((a) => a.name).join(', ')}</div>
-              </div>
-            </button>
-          ))}
-          {detailTracks.length === 0 && <div className="empty">No tracks</div>}
+      <div className="glow-card">
+        <div className="scroll">
+          <button className="back-btn" onClick={() => setDetail({ kind: 'none' })}>
+            <IconBack /> Back
+          </button>
+          <h3 style={{ marginBottom: 10, fontFamily: 'var(--display)' }}>{title}</h3>
+          <div className="list">
+            {detailTracks.map((t) => (
+              <button key={t.id + t.uri} className="list-item" onClick={() => void onPlayTrack(t.uri)}>
+                <img src={coverOf(t.album?.images)} alt="" />
+                <div className="list-item__meta">
+                  <div className="list-item__title">{t.name}</div>
+                  <div className="list-item__sub">{t.artists.map((a) => a.name).join(', ')}</div>
+                </div>
+              </button>
+            ))}
+            {detailTracks.length === 0 && <div className="empty">No tracks</div>}
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, flex: 1 }}>
+    <div className="glow-card">
       <div className="tabs">
         {(['tracks', 'artists', 'playlists'] as Tab[]).map((t) => (
           <button key={t} className={tab === t ? 'active' : ''} onClick={() => { setTab(t); setQuery('') }}>
