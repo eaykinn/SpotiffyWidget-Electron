@@ -1,0 +1,40 @@
+{
+  "name": "spotiffywidget-electron",
+  "version": "1.0.0",
+  "description": "Spotify desktop widget — Electron + React port of SpotiffyWidget",
+  "main": "./out/main/index.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "dist": "npm run build && electron-builder --win"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "electron-store": "^8.2.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "electron": "^35.2.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.3"
+  },
+  "build": {
+    "appId": "com.spotiffy.widget",
+    "productName": "Spotiffy Widget",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": ["nsis"]
+    }
+  }
+}

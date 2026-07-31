@@ -1,0 +1,139 @@
+import { useEffect, useState } from 'react'
+import { IconBack } from './Icons'
+
+type AppSettings = {
+  alwaysOnTop: boolean
+  openSpotifyAtStart: boolean
+  pauseOnLock: boolean
+  preventSleep: boolean
+  theme: 'dark' | 'light'
+  accentColor: string
+}
+
+const ACCENTS = ['#1db954', '#1e90ff', '#ff6b6b', '#f4a261', '#9b5de5', '#00bbf9']
+
+interface Props {
+  onBack: () => void
+  onThemeChange: (settings: AppSettings) => void
+}
+
+export default function Settings({ onBack, onThemeChange }: Props) {
+  const [settings, setLocal] = useState<AppSettings | null>(null)
+
+  useEffect(() => {
+    void window.spotiffy.settings.get().then(setLocal)
+  }, [])
+
+  async function update(partial: Partial<AppSettings>): Promise<void> {
+    const next = await window.spotiffy.settings.set(partial)
+    setLocal(next)
+    onThemeChange(next)
+  }
+
+  if (!settings) return <div className="empty">Loading…</div>
+
+  return (
+    <div className="scroll">
+      <button className="back-btn" onClick={onBack}>
+        <IconBack /> Back
+      </button>
+      <h3 style={{ fontFamily: 'var(--display)', marginBottom: 12 }}>Settings</h3>
+
+      <div className="panel">
+        <Toggle
+          label="Always on top"
+          value={settings.alwaysOnTop}
+          onChange={(v) => void update({ alwaysOnTop: v })}
+        />
+        <Toggle
+          label="Open Spotify at start"
+          value={settings.openSpotifyAtStart}
+          onChange={(v) => void update({ openSpotifyAtStart: v })}
+        />
+        <Toggle
+          label="Pause on lock / sleep"
+          value={settings.pauseOnLock}
+          onChange={(v) => void update({ pauseOnLock: v })}
+        />
+        <Toggle
+          label="Prevent sleep"
+          value={settings.preventSleep}
+          onChange={(v) => void update({ preventSleep: v })}
+        />
+
+        <div className="setting-row">
+          <div>
+            Theme
+            <span style={{ display: 'block' }}>Light or dark shell</span>
+          </div>
+          <div className="segment" style={{ margin: 0 }}>
+            <button
+              className={settings.theme === 'dark' ? 'active' : ''}
+              onClick={() => void update({ theme: 'dark' })}
+            >
+              Dark
+            </button>
+            <button
+              className={settings.theme === 'light' ? 'active' : ''}
+              onClick={() => void update({ theme: 'light' })}
+            >
+              Light
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ marginBottom: 8 }}>Accent</div>
+          <div className="color-row">
+            {ACCENTS.map((c) => (
+              <button
+                key={c}
+                className={`swatch ${settings.accentColor === c ? 'active' : ''}`}
+                style={{ background: c }}
+                onClick={() => void update({ accentColor: c })}
+              />
+            ))}
+          </div>
+        </div>
+
+        <button
+          className="btn btn-ghost"
+          onClick={() => void window.spotiffy.shell.openSpotify()}
+        >
+          Open Spotify
+        </button>
+
+        <button
+          className="btn btn-ghost"
+          onClick={async () => {
+            await window.spotiffy.auth.logout()
+            window.location.reload()
+          }}
+        >
+          Log out
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function Toggle({
+  label,
+  value,
+  onChange
+}: {
+  label: string
+  value: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <div className="setting-row">
+      <div>{label}</div>
+      <button
+        className={`toggle ${value ? 'on' : ''}`}
+        onClick={() => onChange(!value)}
+        aria-pressed={value}
+      />
+    </div>
+  )
+}
