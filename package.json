@@ -9,7 +9,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "dist": "npm run build && electron-builder --win"
+    "dist": "npm run build && electron-builder --win",
+    "dist:portable": "npm run build && electron-builder --win portable"
   },
   "dependencies": {
     "dotenv": "^16.5.0",
@@ -33,8 +34,27 @@
     "directories": {
       "output": "release"
     },
+    "electronDist": "node_modules/electron/dist",
+    "files": [
+      "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".env",
+        "to": ".env"
+      }
+    ],
     "win": {
-      "target": ["nsis"]
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "SpotiffyWidget.exe"
     }
   }
 }

@@ -10,15 +10,25 @@ import {
   powerSaveBlocker,
   shell
 } from 'electron'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { grantAccess, getValidAccessToken, isLoggedIn, login, logout } from './auth'
 import { fetchLyrics } from './lyrics'
 import { getSettings, setSettings, type AppSettings } from './store'
 
-loadEnv({ path: join(process.cwd(), '.env') })
+// Dev: project .env. Packaged: resources/.env (bundled) or next to the .exe
+for (const envPath of [
+  join(process.cwd(), '.env'),
+  ...(app.isPackaged
+    ? [join(process.resourcesPath, '.env'), join(dirname(process.execPath), '.env')]
+    : [])
+]) {
+  loadEnv({ path: envPath, override: false })
+}
 
 const FULL_SIZE = { width: 450, height: 770 }
 const MINI_SIZE = { width: 380, height: 140 }
+const FULL_MIN = { width: 400, height: 650 }
+const FULL_MAX = { width: 600, height: 900 }
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -27,6 +37,37 @@ let isQuitting = false
 let isMini = false
 let chromeRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let chromeRefreshing = false
+let saveSizeTimer: ReturnType<typeof setTimeout> | null = null
+
+function clampFullSize(width: number, height: number): { width: number; height: number } {
+  return {
+    width: Math.min(FULL_MAX.width, Math.max(FULL_MIN.width, Math.round(width))),
+    height: Math.min(FULL_MAX.height, Math.max(FULL_MIN.height, Math.round(height)))
+  }
+}
+
+function getSavedFullSize(): { width: number; height: number } {
+  const s = getSettings()
+  return clampFullSize(s.windowWidth || FULL_SIZE.width, s.windowHeight || FULL_SIZE.height)
+}
+
+function persistFullSizeFromWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed() || isMini) return
+  const bounds = mainWindow.getBounds()
+  const { width, height } = clampFullSize(bounds.width, bounds.height)
+  const cur = getSettings()
+  if (cur.windowWidth === width && cur.windowHeight === height) return
+  setSettings({ windowWidth: width, windowHeight: height })
+}
+
+function schedulePersistFullSize(): void {
+  if (isMini) return
+  if (saveSizeTimer) clearTimeout(saveSizeTimer)
+  saveSizeTimer = setTimeout(() => {
+    saveSizeTimer = null
+    persistFullSizeFromWindow()
+  }, 200)
+}
 
 /**
  * Win11 DWM paints a white inactive frame into transparent corner pixels on blur.
@@ -72,14 +113,15 @@ function scheduleChromeRefresh(): void {
 
 function createWindow(): void {
   const settings = getSettings()
+  const size = getSavedFullSize()
 
   mainWindow = new BrowserWindow({
-    width: FULL_SIZE.width,
-    height: FULL_SIZE.height,
-    minWidth: 400,
-    minHeight: 650,
-    maxWidth: 600,
-    maxHeight: 900,
+    width: size.width,
+    height: size.height,
+    minWidth: FULL_MIN.width,
+    minHeight: FULL_MIN.height,
+    maxWidth: FULL_MAX.width,
+    maxHeight: FULL_MAX.height,
     frame: false,
     transparent: true,
     resizable: true,
@@ -106,6 +148,8 @@ function createWindow(): void {
 
   mainWindow.on('blur', () => scheduleChromeRefresh())
   mainWindow.on('focus', () => scheduleChromeRefresh())
+  mainWindow.on('resized', () => schedulePersistFullSize())
+  mainWindow.on('resize', () => schedulePersistFullSize())
 
   // WM_NCACTIVATE — DWM activation changes are what spawn the white frame
   if (process.platform === 'win32') {
@@ -203,17 +247,21 @@ function registerIpc(): void {
 
   ipcMain.handle('window:setMini', (_e, mini: boolean) => {
     if (!mainWindow) return
-    isMini = mini
     if (mini) {
+      // Capture current full size before collapsing to mini
+      persistFullSizeFromWindow()
+      isMini = true
       mainWindow.setMinimumSize(MINI_SIZE.width, MINI_SIZE.height)
       mainWindow.setMaximumSize(MINI_SIZE.width, MINI_SIZE.height)
       mainWindow.setSize(MINI_SIZE.width, MINI_SIZE.height)
       mainWindow.setResizable(false)
     } else {
+      const size = getSavedFullSize()
+      isMini = false
       mainWindow.setResizable(true)
-      mainWindow.setMinimumSize(400, 650)
-      mainWindow.setMaximumSize(600, 900)
-      mainWindow.setSize(FULL_SIZE.width, FULL_SIZE.height)
+      mainWindow.setMinimumSize(FULL_MIN.width, FULL_MIN.height)
+      mainWindow.setMaximumSize(FULL_MAX.width, FULL_MAX.height)
+      mainWindow.setSize(size.width, size.height)
     }
   })
 

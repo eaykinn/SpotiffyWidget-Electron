@@ -14,6 +14,9 @@ export interface AppSettings {
   preventSleep: boolean
   theme: 'dark' | 'light'
   accentColor: string
+  /** Last full-player window size (restored after mini mode). */
+  windowWidth: number
+  windowHeight: number
 }
 
 const defaults: { tokens: Tokens; settings: AppSettings } = {
@@ -24,7 +27,9 @@ const defaults: { tokens: Tokens; settings: AppSettings } = {
     pauseOnLock: true,
     preventSleep: false,
     theme: 'dark',
-    accentColor: '#1db954'
+    accentColor: '#1db954',
+    windowWidth: 450,
+    windowHeight: 770
   }
 }
 
