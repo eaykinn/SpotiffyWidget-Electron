@@ -5,7 +5,6 @@ import {
   sampleSpectrum,
   type SpectrumData
 } from '../audio/previewSpectrum'
-import { spotify } from '../api/spotify'
 
 const TARGET_FPS = 30
 const FRAME_MS = 1000 / TARGET_FPS
@@ -50,16 +49,13 @@ export default function BeatVisualizer({
     let cancelled = false
     spectrumRef.current = null
 
-    if (!trackId) return
+    // Only use preview_url already on the playback item — never call getTrack
+    // just for visuals (that was an easy way to burn quota on every track change).
+    const url = previewUrl ?? null
+    if (!trackId || !url) return
 
     void (async () => {
       try {
-        let url = previewUrl ?? null
-        if (!url) {
-          const track = await spotify.getTrack(trackId)
-          url = track?.preview_url ?? null
-        }
-        if (!url || cancelled) return
         const data = await buildSpectrumFromPreview(trackId, url)
         if (!cancelled && data) spectrumRef.current = data
       } catch {

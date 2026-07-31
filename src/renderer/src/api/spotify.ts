@@ -13,6 +13,9 @@ import type {
 
 const BASE = 'https://api.spotify.com/v1'
 
+/** Skip /me/player/devices for a short window after a successful ensure. */
+let deviceOkUntil = 0
+
 async function token(): Promise<string> {
   const t = await window.spotiffy.auth.getAccessToken()
   if (!t) throw new Error('Not authenticated')
@@ -76,13 +79,21 @@ export const spotify = {
   },
 
   async ensureDevice(): Promise<boolean> {
+    if (Date.now() < deviceOkUntil) return true
+
     const devices = await this.getDevices()
     if (devices.length === 0) return false
     const active = devices.find((d) => d.is_active)
     if (!active) {
       await this.transferPlayback(devices[0].id, true)
     }
+    deviceOkUntil = Date.now() + 60_000
     return true
+  },
+
+  /** Call after a successful play so the next ensureDevice can no-op. */
+  markDeviceOk(): void {
+    deviceOkUntil = Date.now() + 60_000
   },
 
   async play(body?: object): Promise<void> {

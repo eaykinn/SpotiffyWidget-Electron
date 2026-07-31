@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { coverOf, formatMs } from '../api/spotify'
 import type { usePlayback } from '../hooks/usePlayback'
+import { useTrackLiked } from '../likes/useTrackLiked'
 import {
   IconExpand,
   IconHeart,
@@ -26,21 +27,20 @@ export default function MiniPlayer({ api, onExpand }: Props) {
   const {
     playback,
     progress,
-    liked,
     playPause,
     next,
     previous,
     seek,
     toggleShuffle,
     cycleRepeat,
-    setVolume,
-    toggleLike
+    setVolume
   } = api
 
   const track = playback?.item
   const duration = track?.duration_ms ?? 0
   const cover = coverOf(track?.album?.images)
   const artists = track?.artists?.map((a) => a.name).join(', ') ?? '—'
+  const { liked, toggle: toggleLike } = useTrackLiked(track?.id)
 
   const [volume, setLocalVolume] = useState(playback?.device?.volume_percent ?? 70)
   const [prevVolume, setPrevVolume] = useState(70)

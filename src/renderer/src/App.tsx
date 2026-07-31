@@ -95,6 +95,7 @@ export default function App() {
     await spotify.ensureDevice()
     // Spotify accepts at most 100 uris per play call
     await spotify.play({ uris: list.slice(0, 100) })
+    spotify.markDeviceOk()
     const rest = list.slice(100)
     if (rest.length > 0) {
       void (async () => {
@@ -114,6 +115,7 @@ export default function App() {
     if (!contextUri) return
     await spotify.ensureDevice()
     await spotify.play({ context_uri: contextUri })
+    spotify.markDeviceOk()
     await playbackApi.refresh()
   }
 

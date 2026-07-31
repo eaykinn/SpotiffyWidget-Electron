@@ -1,5 +1,6 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useState, type MouseEvent } from 'react'
 import { coverOf, formatMs, spotify } from '../api/spotify'
+import { useTrackLiked } from '../likes/useTrackLiked'
 import type { Track } from '../types/spotify'
 import { IconAddQueue, IconHeart } from './Icons'
 
@@ -11,13 +12,9 @@ interface Props {
 }
 
 export default function TrackCard({ track, initialLiked = false, compact = false, onPlay }: Props) {
-  const [liked, setLiked] = useState(initialLiked)
+  const { liked, toggle } = useTrackLiked(track.id, initialLiked)
   const [queued, setQueued] = useState(false)
   const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    setLiked(initialLiked)
-  }, [initialLiked, track.id])
 
   const artists = track.artists?.map((a) => a.name).join(', ') ?? '—'
   const album = track.album?.name ?? '—'
@@ -29,11 +26,7 @@ export default function TrackCard({ track, initialLiked = false, compact = false
     if (!track.id || busy) return
     setBusy(true)
     try {
-      if (liked) await spotify.removeTracks([track.id])
-      else await spotify.saveTracks([track.id])
-      setLiked(!liked)
-    } catch {
-      // ignore API errors for now
+      await toggle()
     } finally {
       setBusy(false)
     }

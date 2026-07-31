@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { coverOf, spotify } from '../api/spotify'
+import { likesStore } from '../likes/likesStore'
 import type { Album, Track } from '../types/spotify'
 import { IconBack, IconPlay, IconViewCompact, IconViewNormal } from './Icons'
 import TrackCard from './TrackCard'
@@ -15,19 +16,10 @@ interface Props {
 }
 
 async function resolveLikedMap(tracks: Track[]): Promise<Record<string, boolean>> {
-  const map: Record<string, boolean> = {}
   const ids = tracks.map((t) => t.id).filter(Boolean)
-  for (let i = 0; i < ids.length; i += 50) {
-    const chunk = ids.slice(i, i + 50)
-    try {
-      const flags = await spotify.checkSaved(chunk)
-      chunk.forEach((id, idx) => {
-        map[id] = Boolean(flags[idx])
-      })
-    } catch {
-      // ignore
-    }
-  }
+  await likesStore.ensure(ids)
+  const map: Record<string, boolean> = {}
+  for (const id of ids) map[id] = Boolean(likesStore.get(id))
   return map
 }
 

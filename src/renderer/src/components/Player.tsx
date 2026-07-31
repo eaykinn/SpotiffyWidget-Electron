@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { coverOf, formatMs } from '../api/spotify'
 import type { usePlayback } from '../hooks/usePlayback'
+import { useTrackLiked } from '../likes/useTrackLiked'
 import type { Album, Artist } from '../types/spotify'
 import {
   IconHeart,
@@ -29,8 +30,7 @@ interface Props {
 }
 
 export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, onOpenAlbum }: Props) {
-  const { playback, progress, liked, playPause, next, previous, seek, toggleShuffle, cycleRepeat, setVolume, toggleLike } =
-    api
+  const { playback, progress, playPause, next, previous, seek, toggleShuffle, cycleRepeat, setVolume } = api
 
   const track = playback?.item
   const hasTrack = Boolean(track)
@@ -41,10 +41,12 @@ export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, o
   const artistsLabel = artistList.map((a) => a.name).join(', ') || '—'
   const album = track?.album
   const albumName = album?.name ?? '—'
-  const trackId = track?.id ?? track?.uri ?? ''
+  const trackId = track?.id ?? ''
+  const trackKey = track?.id ?? track?.uri ?? ''
   const trackName = track?.name ?? 'Nothing playing'
   const deviceName = playback?.device?.name
   const repeatState = playback?.repeat_state ?? 'off'
+  const { liked, toggle: toggleLike } = useTrackLiked(trackId || undefined)
 
   const [volume, setLocalVolume] = useState(playback?.device?.volume_percent ?? 70)
   const [prevVolume, setPrevVolume] = useState(70)
@@ -61,7 +63,7 @@ export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, o
 
   useEffect(() => {
     setScrubbing(false)
-  }, [trackId])
+  }, [trackKey])
 
   useEffect(() => {
     const el = titleRef.current
@@ -70,7 +72,7 @@ export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, o
       return
     }
     setTitleOverflow(el.scrollWidth > el.clientWidth + 1)
-  }, [trackName, trackId])
+  }, [trackName, trackKey])
 
   const commitVolume = (v: number): void => {
     setLocalVolume(v)
@@ -112,7 +114,7 @@ export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, o
                   style={{ backgroundImage: `url(${cover})` }}
                   aria-hidden
                 />
-                <img key={trackId} className="player__art" src={cover} alt="" />
+                <img key={trackKey} className="player__art" src={cover} alt="" />
               </>
             ) : (
               <div className="player__art player__art--empty" />
@@ -130,7 +132,7 @@ export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, o
                   style={{ backgroundImage: `url(${cover})` }}
                   aria-hidden
                 />
-                <img key={trackId} className="player__art" src={cover} alt="" />
+                <img key={trackKey} className="player__art" src={cover} alt="" />
               </>
             ) : (
               <div className="player__art player__art--empty" />
@@ -142,7 +144,7 @@ export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, o
           <div className="player__title-row">
             <div
               className={`player__title-wrap ${titleOverflow ? 'player__title-wrap--overflow' : ''}`}
-              key={trackId}
+              key={trackKey}
             >
               <h2 ref={titleRef} className="player__title" title={trackName}>
                 {trackName}

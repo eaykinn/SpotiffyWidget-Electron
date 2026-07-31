@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { coverOf, spotify } from '../api/spotify'
+import { likesStore } from '../likes/likesStore'
 import type { Artist, Track } from '../types/spotify'
 import { IconBack, IconPlay, IconViewCompact, IconViewNormal } from './Icons'
 import TrackCard from './TrackCard'
@@ -16,19 +17,10 @@ interface Props {
 }
 
 async function resolveLikedMap(tracks: Track[]): Promise<Record<string, boolean>> {
-  const map: Record<string, boolean> = {}
   const ids = tracks.map((t) => t.id).filter(Boolean)
-  for (let i = 0; i < ids.length; i += 50) {
-    const chunk = ids.slice(i, i + 50)
-    try {
-      const flags = await spotify.checkSaved(chunk)
-      chunk.forEach((id, idx) => {
-        map[id] = Boolean(flags[idx])
-      })
-    } catch {
-      // ignore
-    }
-  }
+  await likesStore.ensure(ids)
+  const map: Record<string, boolean> = {}
+  for (const id of ids) map[id] = Boolean(likesStore.get(id))
   return map
 }
 
@@ -104,8 +96,8 @@ export default function ArtistDetail({
     }
   }, [seed.id])
 
-  // Load all songs when All tab is opened, or when searching from Top (deeper results)
-  const needsAllCatalog = tab === 'all' || Boolean(query.trim())
+  // Full catalog = 1 request per album — only when user opens All (not on search).
+  const needsAllCatalog = tab === 'all'
 
   useEffect(() => {
     if (!needsAllCatalog || allLoaded) return
@@ -148,17 +140,16 @@ export default function ArtistDetail({
 
   const sourceTracks = useMemo(() => {
     if (query.trim()) {
-      // Search across all catalog when available, else top meanwhile
-      const pool = allLoaded ? allTracks : topTracks
-      return pool.filter((t) => matchesQuery(t, query))
+      // Search the current tab's pool only (All catalog loads only when All is opened).
+      const base = tab === 'all' && allTracks.length > 0 ? allTracks : topTracks
+      return base.filter((t) => matchesQuery(t, query))
     }
     return tab === 'top' ? topTracks : allTracks
-  }, [query, tab, topTracks, allTracks, allLoaded])
+  }, [query, tab, topTracks, allTracks])
 
   const busy =
-    (query.trim() && loadingAll && !allLoaded) ||
     (tab === 'top' && !query.trim() && loadingTracks) ||
-    (tab === 'all' && !query.trim() && loadingAll && !allLoaded)
+    (tab === 'all' && loadingAll && !allLoaded)
 
   return (
     <div className="glow-card artist-detail">

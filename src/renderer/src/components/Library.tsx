@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { coverOf, spotify } from '../api/spotify'
+import { likesStore } from '../likes/likesStore'
 import type { Album, Artist, Playlist, Track } from '../types/spotify'
 import AlbumDetail from './AlbumDetail'
 import ArtistDetail from './ArtistDetail'
@@ -30,26 +31,32 @@ const PAGE = 50
 
 type TrackPage = { items: Track[]; total: number; next: string | null }
 
+/** Survives tab switches so liked search / re-open doesn't re-download the whole library. */
+const likedSession: { tracks: Track[]; complete: boolean; total: number } = {
+  tracks: [],
+  complete: false,
+  total: 0
+}
+
+function syncLikedSession(tracks: Track[], complete: boolean, total?: number): void {
+  likedSession.tracks = tracks
+  likedSession.complete = complete
+  if (typeof total === 'number') likedSession.total = total
+}
+
 async function resolveLikedMap(tracks: Track[], assumeAllLiked = false): Promise<Record<string, boolean>> {
-  const map: Record<string, boolean> = {}
+  const ids = tracks.map((t) => t.id).filter(Boolean)
   if (assumeAllLiked) {
-    for (const t of tracks) {
-      if (t.id) map[t.id] = true
-    }
+    likesStore.markAll(ids, true)
+    const map: Record<string, boolean> = {}
+    for (const id of ids) map[id] = true
     return map
   }
 
-  const ids = tracks.map((t) => t.id).filter(Boolean)
-  for (let i = 0; i < ids.length; i += 50) {
-    const chunk = ids.slice(i, i + 50)
-    try {
-      const flags = await spotify.checkSaved(chunk)
-      chunk.forEach((id, idx) => {
-        map[id] = Boolean(flags[idx])
-      })
-    } catch {
-      // leave unknown as false
-    }
+  await likesStore.ensure(ids)
+  const map: Record<string, boolean> = {}
+  for (const id of ids) {
+    map[id] = Boolean(likesStore.get(id))
   }
   return map
 }
@@ -204,6 +211,7 @@ export default function Library({
   }, [albumOpenSignal?.n])
 
   const clearMainPaging = useCallback((): void => {
+    // Keep likedSession across Liked/Top switches — only reset UI paging for the new mode.
     mainOffsetRef.current = 0
     mainCompleteRef.current = false
     likedLibraryRef.current = []
@@ -271,6 +279,7 @@ export default function Library({
         if (assumeLiked) {
           likedLibraryRef.current = page.items
           setLikedLibrary(page.items)
+          syncLikedSession(page.items, done, page.total)
         }
         setLikedMap(await resolveLikedMap(page.items, assumeLiked))
       } else {
@@ -279,6 +288,7 @@ export default function Library({
           const merged = mergeTracks(likedLibraryRef.current, page.items)
           likedLibraryRef.current = merged
           setLikedLibrary(merged)
+          syncLikedSession(merged, done, page.total)
         }
         const likes = await resolveLikedMap(page.items, assumeLiked)
         setLikedMap((prev) => ({ ...prev, ...likes }))
@@ -330,16 +340,43 @@ export default function Library({
   }, [])
 
   const ensureFullLikedLibrary = useCallback(async (): Promise<Track[]> => {
+    if (likedSession.complete && likedSession.tracks.length > 0) {
+      likedLibraryRef.current = likedSession.tracks
+      return likedSession.tracks
+    }
     if (mainCompleteRef.current && likedLibraryRef.current.length > 0) {
+      syncLikedSession(likedLibraryRef.current, true, likedLibraryRef.current.length)
       return likedLibraryRef.current
     }
 
     setSearchingLibrary(true)
     const gen = fetchGen.current
     try {
-      const all = await spotify.getAllSavedTracks()
+      // Resume from session cache instead of re-downloading from offset 0.
+      let all = likedSession.tracks.length > 0 ? [...likedSession.tracks] : [...likedLibraryRef.current]
+      let offset = all.length
+      let total = likedSession.total > 0 ? likedSession.total : Infinity
+
+      while (offset < total) {
+        if (gen !== fetchGen.current) return likedLibraryRef.current
+        const page = await spotify.getSavedTracksPage(PAGE, offset)
+        total = page.total
+        const tracks = page.items.map((s) => s.track).filter(Boolean)
+        all = mergeTracks(all, tracks)
+        offset = all.length
+        likedLibraryRef.current = all
+        setLikedLibrary(all)
+        syncLikedSession(all, false, total)
+        likesStore.markAll(
+          tracks.map((t) => t.id).filter(Boolean),
+          true
+        )
+        if (!page.next || page.items.length === 0) break
+      }
+
       if (gen !== fetchGen.current) return likedLibraryRef.current
 
+      syncLikedSession(all, true, total === Infinity ? all.length : total)
       likedLibraryRef.current = all
       setLikedLibrary(all)
       mainOffsetRef.current = all.length
@@ -371,8 +408,24 @@ export default function Library({
           setTracks(library.filter((t) => matchesQuery(t, query)))
           mainCompleteRef.current = true
           setMainComplete(true)
+        } else if (trackMode === 'liked' && likedSession.tracks.length > 0) {
+          // Restore session cache (survives Top ↔ Liked switches)
+          likedLibraryRef.current = likedSession.tracks
+          setLikedLibrary(likedSession.tracks)
+          setTracks(likedSession.tracks)
+          mainOffsetRef.current = likedSession.tracks.length
+          setMainOffset(likedSession.tracks.length)
+          setMainTotal(likedSession.total || likedSession.tracks.length)
+          mainCompleteRef.current = likedSession.complete
+          setMainComplete(likedSession.complete)
+          likesStore.markAll(
+            likedSession.tracks.map((t) => t.id).filter(Boolean),
+            true
+          )
+          if (!likedSession.complete) {
+            // Continue paging in background if user scrolls
+          }
         } else if (trackMode === 'liked' && likedLibraryRef.current.length > 0) {
-          // Restore cached liked pages after clearing search
           setTracks(likedLibraryRef.current)
           if (mainCompleteRef.current) setMainComplete(true)
         } else {

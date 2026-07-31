@@ -2,20 +2,26 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { spotify } from '../api/spotify'
 import type { PlaybackState } from '../types/spotify'
 
-/** Was 1s + checkSaved every tick → hundreds of req/min with token /me checks */
-const POLL_MS = 3000
+/** Playing: keep UI in sync without hammering the API. */
+const POLL_PLAYING_MS = 5000
+/** Paused / idle: state rarely changes. */
+const POLL_IDLE_MS = 12000
 
 export function usePlayback(enabled: boolean) {
   const [playback, setPlayback] = useState<PlaybackState | null>(null)
-  const [liked, setLiked] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const localProgress = useRef(0)
   const lastServer = useRef(0)
-  const likedTrackId = useRef<string | null>(null)
   const refreshInFlight = useRef(false)
+  const playbackRef = useRef<PlaybackState | null>(null)
+
+  useEffect(() => {
+    playbackRef.current = playback
+  }, [playback])
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!enabled || refreshInFlight.current) return
+    if (typeof document !== 'undefined' && document.hidden) return
     refreshInFlight.current = true
     try {
       const state = await spotify.getPlayback()
@@ -25,21 +31,6 @@ export function usePlayback(enabled: boolean) {
         localProgress.current = state.progress_ms
         lastServer.current = Date.now()
       }
-
-      const id = state?.item?.id ?? null
-      // Only hit contains API when the track changes — not every poll
-      if (id && id !== likedTrackId.current) {
-        likedTrackId.current = id
-        try {
-          const [isLiked] = await spotify.checkSaved([id])
-          setLiked(Boolean(isLiked))
-        } catch {
-          // ignore like lookup failures (e.g. 429)
-        }
-      } else if (!id) {
-        likedTrackId.current = null
-        setLiked(false)
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Playback error')
     } finally {
@@ -47,14 +38,46 @@ export function usePlayback(enabled: boolean) {
     }
   }, [enabled])
 
+  // Adaptive poll: slower when idle, stopped while the window is hidden.
   useEffect(() => {
     if (!enabled) return
-    void refresh()
-    const id = window.setInterval(() => void refresh(), POLL_MS)
-    return () => window.clearInterval(id)
+
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let cancelled = false
+
+    const schedule = (): void => {
+      if (cancelled || document.hidden) return
+      const playing = Boolean(playbackRef.current?.is_playing)
+      const delay = playing ? POLL_PLAYING_MS : POLL_IDLE_MS
+      timer = setTimeout(() => {
+        void (async () => {
+          await refresh()
+          schedule()
+        })()
+      }, delay)
+    }
+
+    void refresh().then(schedule)
+
+    const onVis = (): void => {
+      if (document.hidden) {
+        if (timer) clearTimeout(timer)
+        timer = null
+        return
+      }
+      void refresh().then(() => {
+        if (!timer) schedule()
+      })
+    }
+    document.addEventListener('visibilitychange', onVis)
+
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVis)
+    }
   }, [enabled, refresh])
 
-  // Smooth progress between polls
   const [progress, setProgress] = useState(0)
   useEffect(() => {
     if (!playback?.is_playing) {
@@ -75,7 +98,8 @@ export function usePlayback(enabled: boolean) {
   const playPause = async (): Promise<void> => {
     if (playback?.is_playing) await spotify.pause()
     else {
-      await spotify.ensureDevice()
+      // Skip /devices when Connect already reports an active device.
+      if (!playback?.device?.is_active) await spotify.ensureDevice()
       await spotify.play()
     }
     await refresh()
@@ -115,18 +139,9 @@ export function usePlayback(enabled: boolean) {
     await spotify.setVolume(percent)
   }
 
-  const toggleLike = async (): Promise<void> => {
-    const id = playback?.item?.id
-    if (!id) return
-    if (liked) await spotify.removeTracks([id])
-    else await spotify.saveTracks([id])
-    setLiked(!liked)
-  }
-
   return {
     playback,
     progress,
-    liked,
     error,
     refresh,
     playPause,
@@ -135,7 +150,6 @@ export function usePlayback(enabled: boolean) {
     seek,
     toggleShuffle,
     cycleRepeat,
-    setVolume,
-    toggleLike
+    setVolume
   }
 }
