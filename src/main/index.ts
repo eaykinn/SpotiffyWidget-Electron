@@ -25,6 +25,50 @@ let tray: Tray | null = null
 let sleepBlockerId: number | null = null
 let isQuitting = false
 let isMini = false
+let chromeRefreshTimer: ReturnType<typeof setTimeout> | null = null
+let chromeRefreshing = false
+
+/**
+ * Win11 DWM paints a white inactive frame into transparent corner pixels on blur.
+ * A 1px size nudge (what manual resize does) forces DWM to drop that chrome.
+ */
+function refreshTransparentChrome(): void {
+  if (chromeRefreshing) return
+  if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return
+
+  chromeRefreshing = true
+  try {
+    const bounds = mainWindow.getBounds()
+    const min = mainWindow.getMinimumSize()
+    const max = mainWindow.getMaximumSize()
+    const resizable = mainWindow.isResizable()
+
+    mainWindow.setResizable(true)
+    mainWindow.setMinimumSize(1, 1)
+    mainWindow.setMaximumSize(10000, 10000)
+    mainWindow.setBounds({ ...bounds, width: bounds.width + 1 })
+    mainWindow.setBounds(bounds)
+    mainWindow.setMinimumSize(min[0], min[1])
+    mainWindow.setMaximumSize(max[0], max[1])
+    mainWindow.setResizable(resizable)
+    mainWindow.setBackgroundColor('#00000000')
+  } finally {
+    // Ignore activation messages caused by our own nudge
+    setTimeout(() => {
+      chromeRefreshing = false
+    }, 80)
+  }
+}
+
+function scheduleChromeRefresh(): void {
+  if (process.platform !== 'win32' || chromeRefreshing) return
+  if (chromeRefreshTimer) clearTimeout(chromeRefreshTimer)
+  // Let DWM finish painting the inactive frame, then clear it
+  chromeRefreshTimer = setTimeout(() => {
+    chromeRefreshTimer = null
+    refreshTransparentChrome()
+  }, 30)
+}
 
 function createWindow(): void {
   const settings = getSettings()
@@ -42,10 +86,11 @@ function createWindow(): void {
     show: false,
     alwaysOnTop: settings.alwaysOnTop,
     skipTaskbar: true,
-    // Must be fully transparent so CSS border-radius can clip the window corners
     backgroundColor: '#00000000',
     hasShadow: false,
-    roundedCorners: true,
+    // Win11 DWM rounded inactive-frame is what draws the white corner blocks
+    roundedCorners: false,
+    thickFrame: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -56,7 +101,18 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+    scheduleChromeRefresh()
   })
+
+  mainWindow.on('blur', () => scheduleChromeRefresh())
+  mainWindow.on('focus', () => scheduleChromeRefresh())
+
+  // WM_NCACTIVATE — DWM activation changes are what spawn the white frame
+  if (process.platform === 'win32') {
+    mainWindow.hookWindowMessage(0x0086, () => {
+      scheduleChromeRefresh()
+    })
+  }
 
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
@@ -130,6 +186,9 @@ function registerIpc(): void {
     }
     if (partial.preventSleep !== undefined) {
       applyPreventSleep(settings.preventSleep)
+    }
+    if (partial.theme !== undefined) {
+      scheduleChromeRefresh()
     }
     return settings
   })

@@ -33,12 +33,15 @@ export default function Settings({ onBack, onThemeChange }: Props) {
   if (!settings) return <div className="empty">Loading…</div>
 
   return (
-    <div className="scroll">
-      <button className="back-btn" onClick={onBack}>
-        <IconBack /> Back
-      </button>
-      <h3 style={{ fontFamily: 'var(--display)', marginBottom: 12 }}>Settings</h3>
+    <div className="settings-panel">
+      <div className="detail-header">
+        <button className="back-btn" onClick={onBack}>
+          <IconBack /> Back
+        </button>
+        <h3 className="detail-header__title">Settings</h3>
+      </div>
 
+      <div className="scroll">
       <div className="panel">
         <Toggle
           label="Always on top"
@@ -112,6 +115,7 @@ export default function Settings({ onBack, onThemeChange }: Props) {
         >
           Log out
         </button>
+      </div>
       </div>
     </div>
   )

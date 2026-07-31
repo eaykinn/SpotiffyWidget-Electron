@@ -9,10 +9,10 @@ import {
   IconPlay,
   IconPrev,
   IconRepeat,
-  IconShuffle,
-  IconVolume
+  IconShuffle
 } from './Icons'
 import RangeSlider from './RangeSlider'
+import VolumeControl from './VolumeControl'
 import './Player.css'
 
 type PlaybackApi = ReturnType<typeof usePlayback>
@@ -20,13 +20,6 @@ type PlaybackApi = ReturnType<typeof usePlayback>
 interface Props {
   api: PlaybackApi
   onExpand: () => void
-}
-
-function volumeLevel(v: number): 'mute' | 'low' | 'mid' | 'high' {
-  if (v <= 0) return 'mute'
-  if (v <= 33) return 'low'
-  if (v <= 66) return 'mid'
-  return 'high'
 }
 
 export default function MiniPlayer({ api, onExpand }: Props) {
@@ -51,7 +44,6 @@ export default function MiniPlayer({ api, onExpand }: Props) {
 
   const [volume, setLocalVolume] = useState(playback?.device?.volume_percent ?? 70)
   const [prevVolume, setPrevVolume] = useState(70)
-  const [volumeOpen, setVolumeOpen] = useState(false)
 
   useEffect(() => {
     const v = playback?.device?.volume_percent
@@ -103,25 +95,13 @@ export default function MiniPlayer({ api, onExpand }: Props) {
         </div>
 
         <div className="mini-shell__controls">
-          <div
-            className={`volume volume--inline ${volumeOpen ? 'volume--open' : ''}`}
-            onMouseEnter={() => setVolumeOpen(true)}
-            onMouseLeave={() => setVolumeOpen(false)}
-          >
-            <button className="icon-btn" onClick={toggleMute} title="Volume">
-              <IconVolume level={volumeLevel(volume)} />
-            </button>
-            <div className="volume__inline-track" aria-hidden={!volumeOpen}>
-              <RangeSlider
-                min={0}
-                max={100}
-                value={volume}
-                title="Volume"
-                onChange={setLocalVolume}
-                onCommit={commitVolume}
-              />
-            </div>
-          </div>
+          <VolumeControl
+            volume={volume}
+            onVolumeChange={setLocalVolume}
+            onCommit={commitVolume}
+            onMuteToggle={toggleMute}
+            orientation="horizontal"
+          />
 
           <button
             className={`icon-btn ${playback?.shuffle_state ? 'active' : ''}`}

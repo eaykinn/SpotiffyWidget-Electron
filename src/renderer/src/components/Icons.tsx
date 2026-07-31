@@ -8,9 +8,10 @@ export function IconClose() {
 
 export function IconMini() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="10" width="18" height="10" rx="2" />
-      <path d="M8 10V6a4 4 0 0 1 8 0v4" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {/* Compact / PIP-style mini player */}
+      <rect x="3" y="3" width="18" height="18" rx="2.5" />
+      <rect x="8" y="13" width="10" height="5" rx="1" fill="currentColor" stroke="none" />
     </svg>
   )
 }
@@ -112,6 +113,34 @@ export function IconQueue() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+    </svg>
+  )
+}
+
+export function IconAddQueue() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 6h12M3 12h8M3 18h8" />
+      <path d="M17 12v8M13 16h8" />
+    </svg>
+  )
+}
+
+/** Dense list rows (compact view) */
+export function IconViewCompact() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  )
+}
+
+/** Spacious list rows (normal view) */
+export function IconViewNormal() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <rect x="4" y="4" width="16" height="5" rx="1" />
+      <rect x="4" y="15" width="16" height="5" rx="1" />
     </svg>
   )
 }

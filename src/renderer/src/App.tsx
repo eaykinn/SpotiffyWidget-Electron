@@ -7,6 +7,7 @@ import Player from './components/Player'
 import Settings from './components/Settings'
 import { IconClose, IconMini, IconSettings } from './components/Icons'
 import { usePlayback } from './hooks/usePlayback'
+import type { Album, Artist } from './types/spotify'
 
 type View = 'main' | 'settings'
 type BottomPanel = 'library' | 'lyrics'
@@ -24,6 +25,8 @@ export default function App() {
   const [view, setView] = useState<View>('main')
   const [bottom, setBottom] = useState<BottomPanel>('library')
   const [queueSignal, setQueueSignal] = useState(0)
+  const [artistOpenSignal, setArtistOpenSignal] = useState<{ artist: Artist; n: number } | null>(null)
+  const [albumOpenSignal, setAlbumOpenSignal] = useState<{ album: Album; n: number } | null>(null)
   const [theme, setTheme] = useState<ThemeSettings>({ theme: 'dark', accentColor: '#1db954' })
 
   const playbackApi = usePlayback(authed && !booting)
@@ -83,8 +86,34 @@ export default function App() {
   }
 
   const playTrack = async (uri: string): Promise<void> => {
+    await playTracks([uri])
+  }
+
+  const playTracks = async (uris: string[]): Promise<void> => {
+    const list = uris.filter(Boolean)
+    if (list.length === 0) return
     await spotify.ensureDevice()
-    await spotify.play({ uris: [uri] })
+    // Spotify accepts at most 100 uris per play call
+    await spotify.play({ uris: list.slice(0, 100) })
+    const rest = list.slice(100)
+    if (rest.length > 0) {
+      void (async () => {
+        for (const uri of rest) {
+          try {
+            await spotify.addToQueue(uri)
+          } catch {
+            break
+          }
+        }
+      })()
+    }
+    await playbackApi.refresh()
+  }
+
+  const playContext = async (contextUri: string): Promise<void> => {
+    if (!contextUri) return
+    await spotify.ensureDevice()
+    await spotify.play({ context_uri: contextUri })
     await playbackApi.refresh()
   }
 
@@ -178,6 +207,14 @@ export default function App() {
                 setBottom('library')
                 setQueueSignal((n) => n + 1)
               }}
+              onOpenArtist={(artist) => {
+                setBottom('library')
+                setArtistOpenSignal((prev) => ({ artist, n: (prev?.n ?? 0) + 1 }))
+              }}
+              onOpenAlbum={(album) => {
+                setBottom('library')
+                setAlbumOpenSignal((prev) => ({ album, n: (prev?.n ?? 0) + 1 }))
+              }}
             />
 
             {bottom === 'lyrics' && track ? (
@@ -188,7 +225,14 @@ export default function App() {
                 onBack={() => setBottom('library')}
               />
             ) : (
-              <Library onPlayTrack={playTrack} queueOpenSignal={queueSignal} />
+              <Library
+                onPlayTrack={playTrack}
+                onPlayTracks={playTracks}
+                onPlayContext={playContext}
+                queueOpenSignal={queueSignal}
+                artistOpenSignal={artistOpenSignal}
+                albumOpenSignal={albumOpenSignal}
+              />
             )}
           </>
         )}

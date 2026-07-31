@@ -123,30 +123,92 @@ export const spotify = {
     await request(`/me/player/queue?uri=${encodeURIComponent(uri)}`, { method: 'POST' })
   },
 
-  async getSavedTracks(limit = 20): Promise<SavedTrack[]> {
-    const data = await request<Paging<SavedTrack>>(`/me/tracks?limit=${limit}`)
+  async getSavedTracks(limit = 50, offset = 0): Promise<SavedTrack[]> {
+    const page = await this.getSavedTracksPage(limit, offset)
+    return page.items
+  },
+
+  async getSavedTracksPage(
+    limit = 50,
+    offset = 0
+  ): Promise<{ items: SavedTrack[]; total: number; next: string | null }> {
+    const data = await request<Paging<SavedTrack>>(
+      `/me/tracks?limit=${Math.min(limit, 50)}&offset=${offset}`
+    )
+    return {
+      items: data?.items ?? [],
+      total: data?.total ?? 0,
+      next: data?.next ?? null
+    }
+  },
+
+  /** Fetch every liked track (50 per request). Optional per-page callback for progressive UI. */
+  async getAllSavedTracks(
+    onPage?: (tracks: Track[], loaded: number, total: number) => void
+  ): Promise<Track[]> {
+    const all: Track[] = []
+    let offset = 0
+    let total = Infinity
+
+    while (offset < total) {
+      const page = await this.getSavedTracksPage(50, offset)
+      total = page.total
+      const tracks = page.items.map((s) => s.track).filter(Boolean)
+      all.push(...tracks)
+      offset += page.items.length
+      onPage?.(tracks, all.length, total)
+      if (!page.next || page.items.length === 0) break
+    }
+
+    return all
+  },
+
+  async getTopTracks(limit = 20, offset = 0): Promise<Track[]> {
+    const page = await this.getTopTracksPage(limit, offset)
+    return page.items
+  },
+
+  async getTopTracksPage(
+    limit = 50,
+    offset = 0
+  ): Promise<{ items: Track[]; total: number; next: string | null }> {
+    const data = await request<Paging<Track>>(
+      `/me/top/tracks?limit=${Math.min(limit, 50)}&offset=${offset}`
+    )
+    return {
+      items: data?.items ?? [],
+      total: data?.total ?? 0,
+      next: data?.next ?? null
+    }
+  },
+
+  async getTopArtists(limit = 20, offset = 0): Promise<Artist[]> {
+    const data = await request<Paging<Artist>>(
+      `/me/top/artists?limit=${Math.min(limit, 50)}&offset=${offset}`
+    )
     return data?.items ?? []
   },
 
-  async getTopTracks(limit = 20): Promise<Track[]> {
-    const data = await request<Paging<Track>>(`/me/top/tracks?limit=${limit}`)
-    return data?.items ?? []
-  },
-
-  async getTopArtists(limit = 20): Promise<Artist[]> {
-    const data = await request<Paging<Artist>>(`/me/top/artists?limit=${limit}`)
-    return data?.items ?? []
-  },
-
-  async getPlaylists(limit = 20): Promise<Playlist[]> {
-    const data = await request<Paging<Playlist>>(`/me/playlists?limit=${limit}`)
+  async getPlaylists(limit = 20, offset = 0): Promise<Playlist[]> {
+    const data = await request<Paging<Playlist>>(
+      `/me/playlists?limit=${Math.min(limit, 50)}&offset=${offset}`
+    )
     return data?.items ?? []
   },
 
   async search(q: string, type: 'track' | 'artist' | 'playlist'): Promise<SearchResponse> {
+    return this.searchPage(q, type, 20, 0)
+  },
+
+  async searchPage(
+    q: string,
+    type: 'track' | 'artist' | 'playlist',
+    limit = 20,
+    offset = 0
+  ): Promise<SearchResponse> {
     return (
       (await request<SearchResponse>(
-        `/search?offset=0&limit=20&type=${type}&q=${encodeURIComponent(q)}`
+        `/search?offset=${offset}&limit=${Math.min(limit, 50)}&type=${type}&q=${encodeURIComponent(q)}`
       )) ?? {}
     )
   },
@@ -157,28 +219,115 @@ export const spotify = {
     return data
   },
 
-  async getArtistTopTracks(id: string): Promise<Track[]> {
-    const data = await request<{ tracks: Track[] }>(`/artists/${id}/top-tracks?market=US`)
+  async getArtistTopTracks(id: string, market = 'TR'): Promise<Track[]> {
+    const data = await request<{ tracks: Track[] }>(
+      `/artists/${id}/top-tracks?market=${encodeURIComponent(market)}`
+    )
     return data?.tracks ?? []
   },
 
-  async getArtistAlbums(id: string): Promise<Album[]> {
-    const data = await request<Paging<Album>>(`/artists/${id}/albums?limit=20&include_groups=album,single`)
-    return data?.items ?? []
+  async getArtistAlbums(id: string, limit = 20, offset = 0): Promise<Album[]> {
+    const page = await this.getArtistAlbumsPage(id, limit, offset)
+    return page.items
   },
 
-  async getPlaylistTracks(id: string, limit = 50): Promise<Track[]> {
-    const data = await request<Paging<{ track: Track | null }>>(
-      `/playlists/${id}/tracks?limit=${limit}`
+  async getArtistAlbumsPage(
+    id: string,
+    limit = 50,
+    offset = 0
+  ): Promise<{ items: Album[]; total: number; next: string | null }> {
+    const data = await request<Paging<Album>>(
+      `/artists/${id}/albums?limit=${Math.min(limit, 50)}&offset=${offset}&include_groups=album,single`
     )
-    return (data?.items ?? []).map((i) => i.track).filter(Boolean) as Track[]
+    return {
+      items: data?.items ?? [],
+      total: data?.total ?? 0,
+      next: data?.next ?? null
+    }
+  },
+
+  /** Unique tracks across the artist's albums & singles (can take a few requests). */
+  async getArtistAllTracks(
+    id: string,
+    onProgress?: (loadedAlbums: number, totalAlbums: number) => void
+  ): Promise<Track[]> {
+    const albums: Album[] = []
+    let offset = 0
+    let total = Infinity
+    while (offset < total) {
+      const page = await this.getArtistAlbumsPage(id, 50, offset)
+      total = page.total
+      albums.push(...page.items)
+      offset += page.items.length
+      if (!page.next || page.items.length === 0) break
+    }
+
+    // Dedupe album groups (same album can appear twice for different markets)
+    const uniqueAlbums: Album[] = []
+    const seenAlbum = new Set<string>()
+    for (const a of albums) {
+      if (!a.id || seenAlbum.has(a.id)) continue
+      seenAlbum.add(a.id)
+      uniqueAlbums.push(a)
+    }
+
+    const tracks: Track[] = []
+    const seenTrack = new Set<string>()
+    for (let i = 0; i < uniqueAlbums.length; i++) {
+      onProgress?.(i + 1, uniqueAlbums.length)
+      const albumTracks = await this.getAlbumTracks(uniqueAlbums[i].id)
+      for (const t of albumTracks) {
+        if (!t.id || seenTrack.has(t.id)) continue
+        seenTrack.add(t.id)
+        tracks.push(t)
+      }
+    }
+    return tracks
+  },
+
+  async getPlaylistTracks(id: string, limit = 50, offset = 0): Promise<Track[]> {
+    const page = await this.getPlaylistTracksPage(id, limit, offset)
+    return page.items
+  },
+
+  async getPlaylistTracksPage(
+    id: string,
+    limit = 50,
+    offset = 0
+  ): Promise<{ items: Track[]; total: number; next: string | null }> {
+    const data = await request<Paging<{ track: Track | null }>>(
+      `/playlists/${id}/tracks?limit=${Math.min(limit, 50)}&offset=${offset}`
+    )
+    const items = (data?.items ?? []).map((i) => i.track).filter(Boolean) as Track[]
+    return {
+      items,
+      total: data?.total ?? items.length,
+      next: data?.next ?? null
+    }
+  },
+
+  async getAlbum(id: string): Promise<Album | null> {
+    return request<Album>(`/albums/${id}`)
   },
 
   async getAlbumTracks(id: string): Promise<Track[]> {
-    const album = await request<Album & { tracks: Paging<Track> }>(`/albums/${id}`)
-    const items = album?.tracks?.items ?? []
-    // Album track objects may omit album — attach parent album for cover
-    return items.map((t) => ({ ...t, album: t.album ?? album! }))
+    const album = await this.getAlbum(id)
+    if (!album) return []
+
+    const items: Track[] = []
+    let offset = 0
+    for (;;) {
+      const page = await request<Paging<Track>>(
+        `/albums/${id}/tracks?limit=50&offset=${offset}`
+      )
+      const batch = page?.items ?? []
+      for (const t of batch) {
+        items.push({ ...t, album: t.album ?? album })
+      }
+      if (!page?.next || batch.length === 0) break
+      offset += batch.length
+    }
+    return items
   },
 
   async checkSaved(ids: string[]): Promise<boolean[]> {

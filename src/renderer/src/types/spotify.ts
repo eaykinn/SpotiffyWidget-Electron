@@ -11,6 +11,7 @@ export interface Artist {
   images?: SpotifyImage[]
   followers?: { total: number }
   genres?: string[]
+  popularity?: number
 }
 
 export interface Album {
@@ -19,6 +20,9 @@ export interface Album {
   uri: string
   images: SpotifyImage[]
   artists: Artist[]
+  total_tracks?: number
+  release_date?: string
+  album_type?: string
 }
 
 export interface Track {

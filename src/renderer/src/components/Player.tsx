@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { coverOf, formatMs } from '../api/spotify'
 import type { usePlayback } from '../hooks/usePlayback'
+import type { Album, Artist } from '../types/spotify'
 import {
   IconHeart,
   IconMic,
@@ -10,10 +11,10 @@ import {
   IconPrev,
   IconQueue,
   IconRepeat,
-  IconShuffle,
-  IconVolume
+  IconShuffle
 } from './Icons'
 import RangeSlider from './RangeSlider'
+import VolumeControl from './VolumeControl'
 import './Player.css'
 
 type PlaybackApi = ReturnType<typeof usePlayback>
@@ -22,28 +23,24 @@ interface Props {
   api: PlaybackApi
   onOpenLyrics: () => void
   onOpenQueue: () => void
+  onOpenArtist: (artist: Artist) => void
+  onOpenAlbum: (album: Album) => void
 }
 
-function volumeLevel(v: number): 'mute' | 'low' | 'mid' | 'high' {
-  if (v <= 0) return 'mute'
-  if (v <= 33) return 'low'
-  if (v <= 66) return 'mid'
-  return 'high'
-}
-
-export default function Player({ api, onOpenLyrics, onOpenQueue }: Props) {
+export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, onOpenAlbum }: Props) {
   const { playback, progress, liked, playPause, next, previous, seek, toggleShuffle, cycleRepeat, setVolume, toggleLike } =
     api
 
   const track = playback?.item
   const duration = track?.duration_ms ?? 0
   const cover = coverOf(track?.album?.images)
-  const artists = track?.artists?.map((a) => a.name).join(', ') ?? '—'
-  const album = track?.album?.name ?? '—'
+  const artistList = track?.artists ?? []
+  const artistsLabel = artistList.map((a) => a.name).join(', ') || '—'
+  const album = track?.album
+  const albumName = album?.name ?? '—'
 
   const [volume, setLocalVolume] = useState(playback?.device?.volume_percent ?? 70)
   const [prevVolume, setPrevVolume] = useState(70)
-  const [volumeOpen, setVolumeOpen] = useState(false)
 
   useEffect(() => {
     const v = playback?.device?.volume_percent
@@ -84,10 +81,43 @@ export default function Player({ api, onOpenLyrics, onOpenQueue }: Props) {
 
         <div className="player__titles">
           <h2 title={track?.name}>{track?.name ?? 'Nothing playing'}</h2>
-          <p title={artists}>{artists}</p>
-          <span className="player__album" title={album}>
-            {album}
-          </span>
+          <p className="player__artists" title={artistsLabel}>
+            {artistList.length === 0 ? (
+              '—'
+            ) : (
+              artistList.map((artist, i) => (
+                <span key={artist.id || `${artist.name}-${i}`}>
+                  {i > 0 ? ', ' : null}
+                  {artist.id ? (
+                    <button
+                      type="button"
+                      className="player__artist-link"
+                      onClick={() => onOpenArtist(artist)}
+                      title={`Open ${artist.name}`}
+                    >
+                      {artist.name}
+                    </button>
+                  ) : (
+                    artist.name
+                  )}
+                </span>
+              ))
+            )}
+          </p>
+          {album?.id ? (
+            <button
+              type="button"
+              className="player__album player__album--link"
+              title={`Open ${albumName}`}
+              onClick={() => onOpenAlbum(album)}
+            >
+              {albumName}
+            </button>
+          ) : (
+            <span className="player__album" title={albumName}>
+              {albumName}
+            </span>
+          )}
         </div>
 
         <div className="player__side">
@@ -105,27 +135,13 @@ export default function Player({ api, onOpenLyrics, onOpenQueue }: Props) {
           <button className="icon-btn" onClick={onOpenLyrics} title="Lyrics" disabled={!track}>
             <IconMic />
           </button>
-          <div
-            className={`volume ${volumeOpen ? 'volume--open' : ''}`}
-            onMouseEnter={() => setVolumeOpen(true)}
-            onMouseLeave={() => setVolumeOpen(false)}
-          >
-            <div className="volume__popup volume__popup--vertical" aria-hidden={!volumeOpen}>
-              <RangeSlider
-                className="volume__slider"
-                orient="vertical"
-                min={0}
-                max={100}
-                value={volume}
-                title="Volume"
-                onChange={setLocalVolume}
-                onCommit={commitVolume}
-              />
-            </div>
-            <button className="icon-btn" onClick={toggleMute} title="Volume">
-              <IconVolume level={volumeLevel(volume)} />
-            </button>
-          </div>
+          <VolumeControl
+            volume={volume}
+            onVolumeChange={setLocalVolume}
+            onCommit={commitVolume}
+            onMuteToggle={toggleMute}
+            orientation="vertical"
+          />
         </div>
       </div>
 
