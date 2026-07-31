@@ -3,6 +3,8 @@ import Store from 'electron-store'
 export interface Tokens {
   accessToken: string
   refreshToken: string
+  /** epoch ms when access token should be treated as expired */
+  expiresAt: number
 }
 
 export interface AppSettings {
@@ -15,7 +17,7 @@ export interface AppSettings {
 }
 
 const defaults: { tokens: Tokens; settings: AppSettings } = {
-  tokens: { accessToken: '', refreshToken: '' },
+  tokens: { accessToken: '', refreshToken: '', expiresAt: 0 },
   settings: {
     alwaysOnTop: true,
     openSpotifyAtStart: false,
@@ -29,7 +31,12 @@ const defaults: { tokens: Tokens; settings: AppSettings } = {
 const store = new Store({ defaults })
 
 export function getTokens(): Tokens {
-  return store.get('tokens')
+  const t = store.get('tokens')
+  return {
+    accessToken: t.accessToken ?? '',
+    refreshToken: t.refreshToken ?? '',
+    expiresAt: typeof t.expiresAt === 'number' ? t.expiresAt : 0
+  }
 }
 
 export function setTokens(tokens: Partial<Tokens>): void {
@@ -37,7 +44,7 @@ export function setTokens(tokens: Partial<Tokens>): void {
 }
 
 export function clearTokens(): void {
-  store.set('tokens', { accessToken: '', refreshToken: '' })
+  store.set('tokens', { accessToken: '', refreshToken: '', expiresAt: 0 })
 }
 
 export function getSettings(): AppSettings {

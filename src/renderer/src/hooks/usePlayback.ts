@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { spotify } from '../api/spotify'
 import type { PlaybackState } from '../types/spotify'
 
-const POLL_MS = 1000
+/** Was 1s + checkSaved every tick → hundreds of req/min with token /me checks */
+const POLL_MS = 3000
 
 export function usePlayback(enabled: boolean) {
   const [playback, setPlayback] = useState<PlaybackState | null>(null)
@@ -10,9 +11,12 @@ export function usePlayback(enabled: boolean) {
   const [error, setError] = useState<string | null>(null)
   const localProgress = useRef(0)
   const lastServer = useRef(0)
+  const likedTrackId = useRef<string | null>(null)
+  const refreshInFlight = useRef(false)
 
-  const refresh = useCallback(async () => {
-    if (!enabled) return
+  const refresh = useCallback(async (): Promise<void> => {
+    if (!enabled || refreshInFlight.current) return
+    refreshInFlight.current = true
     try {
       const state = await spotify.getPlayback()
       setPlayback(state)
@@ -21,14 +25,25 @@ export function usePlayback(enabled: boolean) {
         localProgress.current = state.progress_ms
         lastServer.current = Date.now()
       }
-      if (state?.item?.id) {
-        const [isLiked] = await spotify.checkSaved([state.item.id])
-        setLiked(Boolean(isLiked))
-      } else {
+
+      const id = state?.item?.id ?? null
+      // Only hit contains API when the track changes — not every poll
+      if (id && id !== likedTrackId.current) {
+        likedTrackId.current = id
+        try {
+          const [isLiked] = await spotify.checkSaved([id])
+          setLiked(Boolean(isLiked))
+        } catch {
+          // ignore like lookup failures (e.g. 429)
+        }
+      } else if (!id) {
+        likedTrackId.current = null
         setLiked(false)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Playback error')
+    } finally {
+      refreshInFlight.current = false
     }
   }, [enabled])
 
@@ -49,7 +64,7 @@ export function usePlayback(enabled: boolean) {
     const id = window.setInterval(() => {
       const elapsed = Date.now() - lastServer.current
       const next = Math.min(
-        (playback.item?.duration_ms ?? 0),
+        playback.item?.duration_ms ?? 0,
         localProgress.current + elapsed
       )
       setProgress(next)

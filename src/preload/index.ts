@@ -35,6 +35,10 @@ const api = {
     fetch: (song: string, artist: string, durationMs?: number): Promise<string> =>
       ipcRenderer.invoke('lyrics:fetch', song, artist, durationMs)
   },
+  audio: {
+    fetchPreview: (url: string): Promise<ArrayBuffer | null> =>
+      ipcRenderer.invoke('audio:fetchPreview', url)
+  },
   onLock: (callback: () => void): (() => void) => {
     const handler = (): void => callback()
     ipcRenderer.on('system:lock', handler)

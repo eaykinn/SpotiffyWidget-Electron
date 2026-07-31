@@ -234,6 +234,20 @@ function registerIpc(): void {
       return fetchLyrics(song, artist, durationMs)
     }
   )
+
+  ipcMain.handle('audio:fetchPreview', async (_e, url: string) => {
+    if (typeof url !== 'string' || !/^https:\/\/p\.scdn\.co\//i.test(url)) {
+      return null
+    }
+    try {
+      const res = await fetch(url)
+      if (!res.ok) return null
+      // ArrayBuffer clones cleanly over IPC (Uint8Array often arrives corrupted)
+      return await res.arrayBuffer()
+    } catch {
+      return null
+    }
+  })
 }
 
 function registerPowerHooks(): void {

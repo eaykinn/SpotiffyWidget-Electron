@@ -6,6 +6,8 @@ import { clearTokens, getTokens, setTokens } from './store'
 const AUTH_URL = 'https://accounts.spotify.com/authorize'
 const TOKEN_URL = 'https://accounts.spotify.com/api/token'
 const REDIRECT_URI = 'http://127.0.0.1:5000/callback/'
+/** Refresh a minute before Spotify's expiry */
+const EXPIRY_SKEW_MS = 60_000
 const SCOPES = [
   'streaming',
   'user-read-playback-state',
@@ -71,6 +73,30 @@ function waitForAuthCode(): Promise<string> {
   })
 }
 
+type TokenResponse = {
+  access_token: string
+  refresh_token?: string
+  expires_in?: number
+}
+
+function persistTokenResponse(data: TokenResponse): string {
+  const expiresInSec = typeof data.expires_in === 'number' ? data.expires_in : 3600
+  setTokens({
+    accessToken: data.access_token,
+    ...(data.refresh_token ? { refreshToken: data.refresh_token } : {}),
+    expiresAt: Date.now() + expiresInSec * 1000
+  })
+  return data.access_token
+}
+
+function tokenStillValid(): boolean {
+  const { accessToken, expiresAt } = getTokens()
+  if (!accessToken) return false
+  // Legacy tokens without expiresAt: trust for a short grace, then refresh
+  if (!expiresAt) return false
+  return Date.now() < expiresAt - EXPIRY_SKEW_MS
+}
+
 async function exchangeCode(code: string, codeVerifier: string): Promise<void> {
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -91,14 +117,10 @@ async function exchangeCode(code: string, codeVerifier: string): Promise<void> {
     throw new Error(`Token exchange failed: ${text}`)
   }
 
-  const data = (await response.json()) as {
-    access_token: string
-    refresh_token?: string
-  }
-
-  setTokens({
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token ?? getTokens().refreshToken
+  const data = (await response.json()) as TokenResponse
+  persistTokenResponse({
+    ...data,
+    refresh_token: data.refresh_token ?? getTokens().refreshToken
   })
 }
 
@@ -122,24 +144,8 @@ export async function refreshAccessToken(): Promise<string | null> {
     return null
   }
 
-  const data = (await response.json()) as {
-    access_token: string
-    refresh_token?: string
-  }
-
-  setTokens({
-    accessToken: data.access_token,
-    ...(data.refresh_token ? { refreshToken: data.refresh_token } : {})
-  })
-
-  return data.access_token
-}
-
-async function checkToken(accessToken: string): Promise<boolean> {
-  const response = await fetch('https://api.spotify.com/v1/me', {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  })
-  return response.ok
+  const data = (await response.json()) as TokenResponse
+  return persistTokenResponse(data)
 }
 
 export async function login(): Promise<boolean> {
@@ -163,35 +169,28 @@ export async function login(): Promise<boolean> {
 }
 
 export async function grantAccess(): Promise<boolean> {
-  const { accessToken, refreshToken } = getTokens()
+  if (tokenStillValid()) return true
 
-  if (accessToken) {
-    if (await checkToken(accessToken)) {
-      return true
-    }
+  const { accessToken, refreshToken } = getTokens()
+  if (accessToken || refreshToken) {
     const refreshed = await refreshAccessToken()
     if (refreshed) return true
-  }
-
-  if (!refreshToken && !accessToken) {
-    return login()
   }
 
   return login()
 }
 
+/** Return a usable access token without hitting /me on every call. */
 export async function getValidAccessToken(): Promise<string | null> {
-  const { accessToken } = getTokens()
-  if (!accessToken) {
-    const ok = await grantAccess()
-    return ok ? getTokens().accessToken : null
+  if (tokenStillValid()) {
+    return getTokens().accessToken
   }
 
-  if (await checkToken(accessToken)) {
-    return accessToken
-  }
+  const refreshed = await refreshAccessToken()
+  if (refreshed) return refreshed
 
-  return refreshAccessToken()
+  const ok = await grantAccess()
+  return ok ? getTokens().accessToken : null
 }
 
 export function logout(): void {

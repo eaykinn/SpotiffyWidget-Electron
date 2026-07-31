@@ -107,6 +107,7 @@ export default function Library({
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [searchingLibrary, setSearchingLibrary] = useState(false)
+  const [listError, setListError] = useState<string | null>(null)
   const [compact, setCompact] = useState(() => {
     try {
       return localStorage.getItem(COMPACT_KEY) === '1'
@@ -174,27 +175,35 @@ export default function Library({
     detailCompleteRef.current = detailComplete
   }, [detailComplete])
 
+  const lastQueueSignal = useRef(0)
+  const lastArtistSignal = useRef(0)
+  const lastAlbumSignal = useRef(0)
+
   useEffect(() => {
-    if (queueOpenSignal > 0) void openQueue()
+    if (queueOpenSignal > lastQueueSignal.current) {
+      lastQueueSignal.current = queueOpenSignal
+      void openQueue()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queueOpenSignal])
 
   useEffect(() => {
-    if (artistOpenSignal && artistOpenSignal.n > 0) {
+    if (artistOpenSignal && artistOpenSignal.n > lastArtistSignal.current) {
+      lastArtistSignal.current = artistOpenSignal.n
       void openArtist(artistOpenSignal.artist)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artistOpenSignal?.n])
 
   useEffect(() => {
-    if (albumOpenSignal && albumOpenSignal.n > 0) {
+    if (albumOpenSignal && albumOpenSignal.n > lastAlbumSignal.current) {
+      lastAlbumSignal.current = albumOpenSignal.n
       void openAlbum(albumOpenSignal.album)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [albumOpenSignal?.n])
 
-  const resetMainPaging = useCallback((): void => {
-    fetchGen.current += 1
+  const clearMainPaging = useCallback((): void => {
     mainOffsetRef.current = 0
     mainCompleteRef.current = false
     likedLibraryRef.current = []
@@ -205,19 +214,25 @@ export default function Library({
     setTracks([])
   }, [])
 
-  useEffect(() => {
-    if (detail.kind !== 'none') return
-    if (tab === 'tracks') resetMainPaging()
-  }, [tab, trackMode, resetMainPaging, detail.kind])
+  const browseKeyRef = useRef(`${tab}:${trackMode}:${detail.kind}`)
 
+  // Single load pipeline — avoid reset/fetchGen races that left loading stuck & lists empty
   useEffect(() => {
     if (detail.kind !== 'none') return
+
+    const browseKey = `${tab}:${trackMode}:${detail.kind}`
+    if (browseKeyRef.current !== browseKey) {
+      browseKeyRef.current = browseKey
+      if (tab === 'tracks') clearMainPaging()
+    }
+    setListError(null)
+
     const handle = window.setTimeout(() => {
       void loadTab()
     }, query ? 300 : 0)
     return () => window.clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, trackMode, query, detail.kind])
+  }, [tab, trackMode, query, detail.kind, clearMainPaging])
 
   async function fetchMainPage(offset: number): Promise<TrackPage> {
     if (trackMode === 'liked' && !query.trim()) {
@@ -347,6 +362,7 @@ export default function Library({
     fetchGen.current += 1
     const gen = fetchGen.current
     setLoading(true)
+    setListError(null)
     try {
       if (tab === 'tracks') {
         if (trackMode === 'liked' && query.trim()) {
@@ -383,7 +399,12 @@ export default function Library({
         if (gen !== fetchGen.current) return
         setPlaylists(items)
       }
+    } catch (err) {
+      if (gen === fetchGen.current) {
+        setListError(err instanceof Error ? err.message : 'Failed to load')
+      }
     } finally {
+      // Always clear loading for this generation; a newer loadTab will set it true again
       if (gen === fetchGen.current) setLoading(false)
     }
   }
@@ -675,16 +696,23 @@ export default function Library({
       </div>
 
       <div className="scroll" ref={scrollRef}>
-        {(loading || searchingLibrary) && tracks.length === 0 && tab === 'tracks' && (
+        {listError && (
+          <div className="list-status" style={{ color: 'var(--danger)' }}>
+            {listError}
+          </div>
+        )}
+        {(loading || searchingLibrary) && tab === 'tracks' && tracks.length === 0 && (
           <div className="empty">{searchingLibrary ? 'Searching liked library…' : 'Loading…'}</div>
         )}
+        {loading && tab === 'artists' && artists.length === 0 && <div className="empty">Loading…</div>}
+        {loading && tab === 'playlists' && playlists.length === 0 && <div className="empty">Loading…</div>}
         {searchingLibrary && tracks.length > 0 && (
           <div className="list-status">Searching entire liked library…</div>
         )}
         {tab === 'tracks' &&
           !(loading && tracks.length === 0) &&
           renderTrackList(tracks, likedMap, showSentinel)}
-        {!loading && tab === 'artists' && (
+        {tab === 'artists' && !loading && (
           <div className={`list ${compact ? 'list--compact' : ''}`}>
             {artists.map((a) => (
               <button
@@ -699,9 +727,10 @@ export default function Library({
                 </div>
               </button>
             ))}
+            {artists.length === 0 && !listError && <div className="empty">No artists</div>}
           </div>
         )}
-        {!loading && tab === 'playlists' && (
+        {tab === 'playlists' && !loading && (
           <div className={`list ${compact ? 'list--compact' : ''}`}>
             {playlists.map((p) => (
               <button
@@ -716,6 +745,7 @@ export default function Library({
                 </div>
               </button>
             ))}
+            {playlists.length === 0 && !listError && <div className="empty">No playlists</div>}
           </div>
         )}
       </div>

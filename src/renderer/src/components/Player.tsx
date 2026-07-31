@@ -13,6 +13,7 @@ import {
   IconRepeat,
   IconShuffle
 } from './Icons'
+import BeatVisualizer from './BeatVisualizer'
 import RangeSlider from './RangeSlider'
 import VolumeControl from './VolumeControl'
 import './Player.css'
@@ -87,6 +88,15 @@ export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, o
 
   return (
     <section className={`player ${!hasTrack ? 'player--empty' : ''} ${isPlaying ? 'player--playing' : ''}`}>
+      {hasTrack && (
+        <BeatVisualizer
+          trackId={track?.id}
+          previewUrl={track?.preview_url}
+          progressMs={seekDisplay}
+          durationMs={duration}
+          active={isPlaying}
+        />
+      )}
       <div className="player__top">
         {album?.id ? (
           <button

@@ -32,6 +32,8 @@ export interface Track {
   duration_ms: number
   artists: Artist[]
   album: Album
+  /** 30s MP3 preview — used for offline spectrum (Web Playback audio is DRM-locked) */
+  preview_url?: string | null
 }
 
 export interface Playlist {

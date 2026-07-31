@@ -22,7 +22,8 @@ async function token(): Promise<string> {
 async function request<T>(
   path: string,
   options: RequestInit = {},
-  allowEmpty = false
+  allowEmpty = false,
+  retry = 0
 ): Promise<T | null> {
   const accessToken = await token()
   const response = await fetch(`${BASE}${path}`, {
@@ -36,6 +37,13 @@ async function request<T>(
 
   if (response.status === 204 || (allowEmpty && response.status === 200 && response.headers.get('content-length') === '0')) {
     return null
+  }
+
+  if (response.status === 429 && retry < 2) {
+    const retryAfter = Number(response.headers.get('Retry-After') || '2')
+    const waitMs = Math.min(15_000, Math.max(1, retryAfter) * 1000)
+    await new Promise((r) => setTimeout(r, waitMs))
+    return request<T>(path, options, allowEmpty, retry + 1)
   }
 
   if (!response.ok) {
@@ -211,6 +219,10 @@ export const spotify = {
         `/search?offset=${offset}&limit=${Math.min(limit, 50)}&type=${type}&q=${encodeURIComponent(q)}`
       )) ?? {}
     )
+  },
+
+  async getTrack(id: string): Promise<Track | null> {
+    return request<Track>(`/tracks/${id}`)
   },
 
   async getArtist(id: string): Promise<Artist> {
