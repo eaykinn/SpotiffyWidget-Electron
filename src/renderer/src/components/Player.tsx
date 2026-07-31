@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { coverOf, formatMs } from '../api/spotify'
 import type { usePlayback } from '../hooks/usePlayback'
 import type { Album, Artist } from '../types/spotify'
@@ -32,20 +32,44 @@ export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, o
     api
 
   const track = playback?.item
+  const hasTrack = Boolean(track)
+  const isPlaying = Boolean(playback?.is_playing)
   const duration = track?.duration_ms ?? 0
   const cover = coverOf(track?.album?.images)
   const artistList = track?.artists ?? []
   const artistsLabel = artistList.map((a) => a.name).join(', ') || '—'
   const album = track?.album
   const albumName = album?.name ?? '—'
+  const trackId = track?.id ?? track?.uri ?? ''
+  const trackName = track?.name ?? 'Nothing playing'
+  const deviceName = playback?.device?.name
+  const repeatState = playback?.repeat_state ?? 'off'
 
   const [volume, setLocalVolume] = useState(playback?.device?.volume_percent ?? 70)
   const [prevVolume, setPrevVolume] = useState(70)
+  const [titleOverflow, setTitleOverflow] = useState(false)
+  const [scrubbing, setScrubbing] = useState(false)
+  const [scrubMs, setScrubMs] = useState(0)
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const seekDisplay = scrubbing ? scrubMs : progress
 
   useEffect(() => {
     const v = playback?.device?.volume_percent
     if (typeof v === 'number') setLocalVolume(v)
   }, [playback?.device?.volume_percent])
+
+  useEffect(() => {
+    setScrubbing(false)
+  }, [trackId])
+
+  useEffect(() => {
+    const el = titleRef.current
+    if (!el) {
+      setTitleOverflow(false)
+      return
+    }
+    setTitleOverflow(el.scrollWidth > el.clientWidth + 1)
+  }, [trackName, trackId])
 
   const commitVolume = (v: number): void => {
     setLocalVolume(v)
@@ -62,27 +86,73 @@ export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, o
   }
 
   return (
-    <section className="player">
+    <section className={`player ${!hasTrack ? 'player--empty' : ''} ${isPlaying ? 'player--playing' : ''}`}>
       <div className="player__top">
-        <div className="player__cover">
-          {cover ? (
-            <>
-              <div
-                className="player__cover-glow"
-                style={{ backgroundImage: `url(${cover})` }}
-                aria-hidden
-              />
-              <img className="player__art" src={cover} alt="" />
-            </>
-          ) : (
-            <div className="player__art player__art--empty" />
-          )}
-        </div>
+        {album?.id ? (
+          <button
+            type="button"
+            className={`player__cover player__cover--link ${isPlaying ? 'player__cover--playing' : ''}`}
+            onClick={() => onOpenAlbum(album)}
+            title={`Open ${albumName}`}
+          >
+            {cover ? (
+              <>
+                <div
+                  className="player__cover-glow"
+                  style={{ backgroundImage: `url(${cover})` }}
+                  aria-hidden
+                />
+                <img key={trackId} className="player__art" src={cover} alt="" />
+              </>
+            ) : (
+              <div className="player__art player__art--empty" />
+            )}
+            <span className="player__cover-hint" aria-hidden>
+              Album
+            </span>
+          </button>
+        ) : (
+          <div className={`player__cover ${isPlaying ? 'player__cover--playing' : ''}`}>
+            {cover ? (
+              <>
+                <div
+                  className="player__cover-glow"
+                  style={{ backgroundImage: `url(${cover})` }}
+                  aria-hidden
+                />
+                <img key={trackId} className="player__art" src={cover} alt="" />
+              </>
+            ) : (
+              <div className="player__art player__art--empty" />
+            )}
+          </div>
+        )}
 
-        <div className="player__titles">
-          <h2 title={track?.name}>{track?.name ?? 'Nothing playing'}</h2>
+        <div className="player__meta">
+          <div className="player__title-row">
+            <div
+              className={`player__title-wrap ${titleOverflow ? 'player__title-wrap--overflow' : ''}`}
+              key={trackId}
+            >
+              <h2 ref={titleRef} className="player__title" title={trackName}>
+                {trackName}
+              </h2>
+            </div>
+            <button
+              type="button"
+              className={`icon-btn player__like ${liked ? 'active' : ''}`}
+              onClick={() => void toggleLike()}
+              title="Like"
+              disabled={!hasTrack}
+            >
+              <IconHeart filled={liked} />
+            </button>
+          </div>
+
           <p className="player__artists" title={artistsLabel}>
-            {artistList.length === 0 ? (
+            {!hasTrack ? (
+              'Play something from your library'
+            ) : artistList.length === 0 ? (
               '—'
             ) : (
               artistList.map((artist, i) => (
@@ -104,82 +174,124 @@ export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, o
               ))
             )}
           </p>
-          {album?.id ? (
-            <button
-              type="button"
-              className="player__album player__album--link"
-              title={`Open ${albumName}`}
-              onClick={() => onOpenAlbum(album)}
-            >
-              {albumName}
-            </button>
-          ) : (
-            <span className="player__album" title={albumName}>
-              {albumName}
-            </span>
-          )}
-        </div>
 
-        <div className="player__side">
-          <button className="icon-btn" onClick={onOpenQueue} title="Queue">
-            <IconQueue />
-          </button>
-          <button
-            className={`icon-btn ${liked ? 'active' : ''}`}
-            onClick={() => void toggleLike()}
-            title="Like"
-            disabled={!track}
-          >
-            <IconHeart filled={liked} />
-          </button>
-          <button className="icon-btn" onClick={onOpenLyrics} title="Lyrics" disabled={!track}>
-            <IconMic />
-          </button>
-          <VolumeControl
-            volume={volume}
-            onVolumeChange={setLocalVolume}
-            onCommit={commitVolume}
-            onMuteToggle={toggleMute}
-            orientation="vertical"
-          />
+          {hasTrack &&
+            (album?.id ? (
+              <button
+                type="button"
+                className="player__album player__album--link"
+                title={`Open ${albumName}`}
+                onClick={() => onOpenAlbum(album)}
+              >
+                {albumName}
+              </button>
+            ) : (
+              <span className="player__album" title={albumName}>
+                {albumName}
+              </span>
+            ))}
+
+          <div className="player__toolbar">
+            <div className="player__actions">
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={onOpenQueue}
+                title="Queue"
+                disabled={!hasTrack}
+              >
+                <IconQueue />
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={onOpenLyrics}
+                title="Lyrics"
+                disabled={!hasTrack}
+              >
+                <IconMic />
+              </button>
+              <VolumeControl
+                volume={volume}
+                onVolumeChange={setLocalVolume}
+                onCommit={commitVolume}
+                onMuteToggle={toggleMute}
+                orientation="vertical"
+              />
+            </div>
+            {deviceName && (
+              <span className="player__device" title={deviceName}>
+                {deviceName}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="player__seek">
-        <span>{formatMs(progress)}</span>
+        <span>{formatMs(seekDisplay)}</span>
         <RangeSlider
           min={0}
           max={duration || 1}
-          value={Math.min(progress, duration || 1)}
-          disabled={!track}
-          onChange={(v) => void seek(v)}
+          value={Math.min(seekDisplay, duration || 1)}
+          disabled={!hasTrack}
+          onChange={(v) => {
+            setScrubbing(true)
+            setScrubMs(v)
+          }}
+          onCommit={(v) => {
+            setScrubbing(false)
+            setScrubMs(v)
+            void seek(v)
+          }}
         />
         <span>{formatMs(duration)}</span>
       </div>
 
       <div className="player__controls">
         <button
+          type="button"
           className={`icon-btn ${playback?.shuffle_state ? 'active' : ''}`}
           onClick={() => void toggleShuffle()}
           title="Shuffle"
+          disabled={!hasTrack}
         >
           <IconShuffle />
         </button>
-        <button className="icon-btn" onClick={() => void previous()} title="Previous">
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={() => void previous()}
+          title="Previous"
+          disabled={!hasTrack}
+        >
           <IconPrev />
         </button>
-        <button className="icon-btn primary" onClick={() => void playPause()} title="Play/Pause">
-          {playback?.is_playing ? <IconPause /> : <IconPlay />}
+        <button
+          type="button"
+          className="icon-btn primary"
+          onClick={() => void playPause()}
+          title="Play/Pause"
+        >
+          {isPlaying ? <IconPause /> : <IconPlay />}
         </button>
-        <button className="icon-btn" onClick={() => void next()} title="Next">
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={() => void next()}
+          title="Next"
+          disabled={!hasTrack}
+        >
           <IconNext />
         </button>
         <button
-          className={`icon-btn ${playback?.repeat_state && playback.repeat_state !== 'off' ? 'active' : ''}`}
+          type="button"
+          className={`icon-btn ${repeatState !== 'off' ? 'active' : ''}`}
           onClick={() => void cycleRepeat()}
-          title={`Repeat: ${playback?.repeat_state ?? 'off'}`}
+          title={`Repeat: ${repeatState}`}
+          disabled={!hasTrack}
         >
-          <IconRepeat />
+          <IconRepeat mode={repeatState === 'off' ? 'context' : repeatState} />
         </button>
       </div>
     </section>

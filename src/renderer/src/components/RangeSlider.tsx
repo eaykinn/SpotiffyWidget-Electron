@@ -42,8 +42,7 @@ export default function RangeSlider({
       title={title}
       style={style}
       onChange={(e) => onChange(Number(e.target.value))}
-      onMouseUp={(e) => onCommit?.(Number((e.target as HTMLInputElement).value))}
-      onTouchEnd={(e) => onCommit?.(Number((e.target as HTMLInputElement).value))}
+      onPointerUp={(e) => onCommit?.(Number((e.target as HTMLInputElement).value))}
       onKeyUp={(e) => onCommit?.(Number((e.target as HTMLInputElement).value))}
     />
   )

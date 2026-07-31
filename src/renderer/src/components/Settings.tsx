@@ -12,6 +12,16 @@ type AppSettings = {
 
 const ACCENTS = ['#1db954', '#1e90ff', '#ff6b6b', '#f4a261', '#9b5de5', '#00bbf9']
 
+function normalizeHex(color: string): string {
+  const c = color.trim().toLowerCase()
+  if (/^#[0-9a-f]{6}$/.test(c)) return c
+  if (/^#[0-9a-f]{3}$/.test(c)) {
+    const [, r, g, b] = c
+    return `#${r}${r}${g}${g}${b}${b}`
+  }
+  return c
+}
+
 interface Props {
   onBack: () => void
   onThemeChange: (settings: AppSettings) => void
@@ -31,6 +41,9 @@ export default function Settings({ onBack, onThemeChange }: Props) {
   }
 
   if (!settings) return <div className="empty">Loading…</div>
+
+  const accent = normalizeHex(settings.accentColor)
+  const isCustomAccent = !ACCENTS.includes(accent)
 
   return (
     <div className="settings-panel">
@@ -91,11 +104,28 @@ export default function Settings({ onBack, onThemeChange }: Props) {
             {ACCENTS.map((c) => (
               <button
                 key={c}
-                className={`swatch ${settings.accentColor === c ? 'active' : ''}`}
+                type="button"
+                className={`swatch ${accent === c ? 'active' : ''}`}
                 style={{ background: c }}
+                title={c}
                 onClick={() => void update({ accentColor: c })}
               />
             ))}
+            <label
+              className={`swatch swatch--picker ${isCustomAccent ? 'active' : ''}`}
+              style={isCustomAccent ? { background: accent } : undefined}
+              title="Custom color"
+            >
+              <input
+                type="color"
+                className="swatch__input"
+                value={accent}
+                onChange={(e) => void update({ accentColor: normalizeHex(e.target.value) })}
+              />
+              <span className="swatch__picker-icon" aria-hidden>
+                +
+              </span>
+            </label>
           </div>
         </div>
 

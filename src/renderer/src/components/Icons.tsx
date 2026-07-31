@@ -73,13 +73,27 @@ export function IconShuffle() {
   )
 }
 
-export function IconRepeat() {
+export function IconRepeat({ mode = 'context' }: { mode?: 'off' | 'context' | 'track' }) {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M17 1l4 4-4 4" />
       <path d="M3 11V9a4 4 0 0 1 4-4h14" />
       <path d="M7 23l-4-4 4-4" />
       <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+      {mode === 'track' && (
+        <text
+          x="12"
+          y="14.5"
+          textAnchor="middle"
+          fill="currentColor"
+          stroke="none"
+          fontSize="9"
+          fontWeight="700"
+          fontFamily="system-ui, sans-serif"
+        >
+          1
+        </text>
+      )}
     </svg>
   )
 }

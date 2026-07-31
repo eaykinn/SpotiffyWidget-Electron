@@ -1,12 +1,11 @@
 .player {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   flex-shrink: 0;
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
   border-radius: var(--radius);
-  /* Single continuous wash — no separate bottom glow band */
   background:
     radial-gradient(
       130% 100% at 0% 0%,
@@ -25,7 +24,6 @@
       color-mix(in srgb, var(--accent) 8%, var(--bg-solid))
     );
   position: relative;
-  /* visible so the vertical volume popup isn't clipped */
   overflow: visible;
   isolation: isolate;
 }
@@ -35,19 +33,40 @@
   z-index: 1;
 }
 
+.player--empty {
+  opacity: 0.92;
+}
+
 .player__top {
   display: grid;
-  grid-template-columns: 132px 1fr 36px;
-  gap: 14px;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
   align-items: stretch;
-  min-height: 132px;
+  min-height: 120px;
 }
 
 .player__cover {
   position: relative;
-  width: 132px;
-  height: 132px;
+  width: 120px;
+  height: 120px;
   flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 12px;
+  cursor: default;
+  color: inherit;
+}
+
+.player__cover--link {
+  cursor: pointer;
+}
+
+/* Idle: subtle rim without glow noise */
+.player__cover--link .player__art {
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.45),
+    0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent);
 }
 
 .player__cover-glow {
@@ -60,6 +79,12 @@
   z-index: 0;
   border-radius: 12px;
   pointer-events: none;
+  transition: opacity 280ms ease;
+}
+
+.player__cover--playing .player__cover-glow {
+  opacity: 0.72;
+  animation: cover-glow-pulse 2.4s ease-in-out infinite;
 }
 
 .player__art {
@@ -70,12 +95,65 @@
   position: relative;
   z-index: 1;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
-  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
-  animation: art-in 420ms ease;
+  transition:
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 280ms ease;
+  animation: art-in 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.player__cover:hover .player__art {
+.player__cover--playing .player__art {
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.45),
+    0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 0 18px var(--accent-soft);
+  animation:
+    art-in 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    cover-ring-pulse 2.4s ease-in-out 420ms infinite;
+}
+
+.player__cover--link:hover .player__art {
   transform: scale(1.03) rotate(-0.5deg);
+}
+
+.player__cover-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 20px 8px 8px;
+  border-radius: 0 0 12px 12px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition:
+    opacity 140ms ease,
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 140ms ease;
+  pointer-events: none;
+}
+
+/* Only real hover devices — avoids sticky “Album” overlay after click */
+@media (hover: hover) and (pointer: fine) {
+  .player__cover--link:hover .player__cover-hint,
+  .player__cover--link:focus-visible .player__cover-hint {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+  }
+
+  .player__cover--link:hover .player__art {
+    box-shadow:
+      0 12px 30px rgba(0, 0, 0, 0.5),
+      0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+  }
 }
 
 .player__art--empty {
@@ -84,8 +162,95 @@
 
 @keyframes art-in {
   from {
-    opacity: 0.35;
-    transform: scale(0.96);
+    opacity: 0.25;
+    transform: scale(0.94);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes cover-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@keyframes cover-ring-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 10px 28px rgba(0, 0, 0, 0.45),
+      0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent),
+      0 0 14px var(--accent-soft);
+  }
+  50% {
+    box-shadow:
+      0 10px 28px rgba(0, 0, 0, 0.45),
+      0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent),
+      0 0 22px var(--accent-glow);
+  }
+}
+
+.player__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 2px 0;
+}
+
+.player__title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.player__title-wrap {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, #000 88%, transparent);
+  animation: title-in 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.player__title-wrap--overflow:hover .player__title {
+  animation: title-marquee 9s linear infinite;
+}
+
+.player__title {
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+  margin: 0;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.player__title-wrap--overflow .player__title {
+  text-overflow: clip;
+  max-width: none;
+  padding-right: 24px;
+}
+
+@keyframes title-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -93,34 +258,42 @@
   }
 }
 
-.player__titles {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-evenly;
-  padding: 4px 0;
+@keyframes title-marquee {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+  88%,
+  100% {
+    transform: translateX(calc(-100% + 120px));
+  }
 }
 
-.player__titles h2 {
-  font-family: var(--font);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.25;
+.player__like {
+  flex-shrink: 0;
+  width: 32px !important;
+  height: 32px !important;
 }
 
-.player__titles p,
+.player__like.active {
+  color: var(--accent);
+}
+
 .player__artists {
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text) 82%, var(--text-muted));
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.25;
+  margin: 0;
+}
+
+.player--empty .player__artists {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .player__artist-link {
@@ -141,12 +314,13 @@
   text-underline-offset: 2px;
 }
 
+/* Secondary to artist — muted at rest, accent only on hover */
 .player__album {
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -162,30 +336,62 @@
   background: none;
   text-align: left;
   cursor: pointer;
-  transition: filter 140ms ease, opacity 140ms ease;
+  transition: color 140ms ease;
 }
 
 .player__album--link:hover {
-  filter: brightness(1.15);
+  color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.player__side {
+/* Actions + device on one row */
+.player__toolbar {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 2px 0;
-  flex-shrink: 0;
-  overflow: visible;
-  position: relative;
-  z-index: 6;
+  gap: 8px;
+  margin-top: 6px;
+  min-width: 0;
 }
 
-.player__side .icon-btn {
-  width: 32px;
-  height: 32px;
+.player__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+  padding: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.player__actions .icon-btn {
+  width: 28px;
+  height: 28px;
+  color: var(--text-muted);
+}
+
+.player__actions .icon-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.player__actions .volume {
+  z-index: 8;
+}
+
+.player__device {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.5;
 }
 
 .player__seek {
@@ -206,17 +412,21 @@
   text-align: right;
 }
 
+.player__seek .range:hover::-webkit-slider-thumb {
+  transform: scale(1.25);
+}
+
 .player__controls {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 8px;
   padding-bottom: 2px;
 }
 
 .player__controls .icon-btn {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
 }
 
 .player__controls .icon-btn:not(.primary) svg {
@@ -232,7 +442,7 @@
 .player__controls .icon-btn.primary {
   width: 44px;
   height: 44px;
-  /* Inherit shared player gradient language from .icon-btn.primary */
+  margin: 0 4px;
   background: linear-gradient(
     145deg,
     color-mix(in srgb, var(--accent) 88%, var(--surface)),
@@ -257,6 +467,22 @@
 
 .player__controls .icon-btn.active {
   color: var(--accent);
+}
+
+.player__controls .icon-btn.active:not(.primary)::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateX(-50%);
+}
+
+.player__controls .icon-btn {
+  position: relative;
 }
 
 .volume {

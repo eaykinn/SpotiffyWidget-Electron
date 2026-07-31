@@ -44,11 +44,19 @@ export default function MiniPlayer({ api, onExpand }: Props) {
 
   const [volume, setLocalVolume] = useState(playback?.device?.volume_percent ?? 70)
   const [prevVolume, setPrevVolume] = useState(70)
+  const [scrubbing, setScrubbing] = useState(false)
+  const [scrubMs, setScrubMs] = useState(0)
+  const trackId = track?.id ?? track?.uri ?? ''
+  const seekDisplay = scrubbing ? scrubMs : progress
 
   useEffect(() => {
     const v = playback?.device?.volume_percent
     if (typeof v === 'number') setLocalVolume(v)
   }, [playback?.device?.volume_percent])
+
+  useEffect(() => {
+    setScrubbing(false)
+  }, [trackId])
 
   const commitVolume = (v: number): void => {
     setLocalVolume(v)
@@ -83,13 +91,21 @@ export default function MiniPlayer({ api, onExpand }: Props) {
         </div>
 
         <div className="mini-shell__seek">
-          <span>{formatMs(progress)}</span>
+          <span>{formatMs(seekDisplay)}</span>
           <RangeSlider
             min={0}
             max={duration || 1}
-            value={Math.min(progress, duration || 1)}
+            value={Math.min(seekDisplay, duration || 1)}
             disabled={!track}
-            onChange={(v) => void seek(v)}
+            onChange={(v) => {
+              setScrubbing(true)
+              setScrubMs(v)
+            }}
+            onCommit={(v) => {
+              setScrubbing(false)
+              setScrubMs(v)
+              void seek(v)
+            }}
           />
           <span>{formatMs(duration)}</span>
         </div>
@@ -132,7 +148,13 @@ export default function MiniPlayer({ api, onExpand }: Props) {
             onClick={() => void cycleRepeat()}
             title={`Repeat: ${playback?.repeat_state ?? 'off'}`}
           >
-            <IconRepeat />
+            <IconRepeat
+              mode={
+                playback?.repeat_state === 'track' || playback?.repeat_state === 'context'
+                  ? playback.repeat_state
+                  : 'context'
+              }
+            />
           </button>
         </div>
       </div>
