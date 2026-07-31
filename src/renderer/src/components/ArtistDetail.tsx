@@ -203,27 +203,26 @@ export default function ArtistDetail({
         </div>
       </div>
 
-      <div className="segment artist-detail__tabs">
-        <button
-          className={tab === 'top' && !query.trim() ? 'active' : ''}
-          onClick={() => {
-            setTab('top')
-            setQuery('')
-          }}
-        >
-          Top Tracks
-        </button>
-        <button
-          className={tab === 'all' && !query.trim() ? 'active' : ''}
-          onClick={() => setTab('all')}
-        >
-          All Songs
-        </button>
-      </div>
-
-      <div className="list-toolbar">
+      <div className="list-toolbar artist-detail__toolbar">
+        <div className="segment segment--inline artist-detail__tabs">
+          <button
+            className={tab === 'top' && !query.trim() ? 'active' : ''}
+            onClick={() => {
+              setTab('top')
+              setQuery('')
+            }}
+          >
+            Top
+          </button>
+          <button
+            className={tab === 'all' && !query.trim() ? 'active' : ''}
+            onClick={() => setTab('all')}
+          >
+            All
+          </button>
+        </div>
         <input
-          className="search"
+          className="search search--compact"
           placeholder="Search songs…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}

@@ -908,6 +908,11 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+.artist-detail__toolbar {
+  flex-shrink: 0;
+  gap: 6px;
+}
+
 .artist-detail__tabs {
   flex-shrink: 0;
   margin-bottom: 0;
