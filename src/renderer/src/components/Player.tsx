@@ -23,13 +23,21 @@ type PlaybackApi = ReturnType<typeof usePlayback>
 
 interface Props {
   api: PlaybackApi
+  beatVisualizer?: boolean
   onOpenLyrics: () => void
   onOpenQueue: () => void
   onOpenArtist: (artist: Artist) => void
   onOpenAlbum: (album: Album) => void
 }
 
-export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, onOpenAlbum }: Props) {
+export default function Player({
+  api,
+  beatVisualizer = true,
+  onOpenLyrics,
+  onOpenQueue,
+  onOpenArtist,
+  onOpenAlbum
+}: Props) {
   const { playback, progress, playPause, next, previous, seek, toggleShuffle, cycleRepeat, setVolume } = api
 
   const track = playback?.item
@@ -90,7 +98,7 @@ export default function Player({ api, onOpenLyrics, onOpenQueue, onOpenArtist, o
 
   return (
     <section className={`player ${!hasTrack ? 'player--empty' : ''} ${isPlaying ? 'player--playing' : ''}`}>
-      {hasTrack && (
+      {hasTrack && beatVisualizer && (
         <BeatVisualizer
           trackId={track?.id}
           previewUrl={track?.preview_url}

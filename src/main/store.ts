@@ -14,6 +14,8 @@ export interface AppSettings {
   preventSleep: boolean
   theme: 'dark' | 'light'
   accentColor: string
+  /** Background bar visualizer on the full player. */
+  beatVisualizer: boolean
   /** Last full-player window size (restored after mini mode). */
   windowWidth: number
   windowHeight: number
@@ -31,6 +33,7 @@ const defaults: { tokens: Tokens; settings: AppSettings } = {
     preventSleep: false,
     theme: 'dark',
     accentColor: '#1db954',
+    beatVisualizer: true,
     windowWidth: 450,
     windowHeight: 770,
     windowX: null,

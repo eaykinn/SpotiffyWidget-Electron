@@ -28,6 +28,7 @@ export default function App() {
   const [artistOpenSignal, setArtistOpenSignal] = useState<{ artist: Artist; n: number } | null>(null)
   const [albumOpenSignal, setAlbumOpenSignal] = useState<{ album: Album; n: number } | null>(null)
   const [theme, setTheme] = useState<ThemeSettings>({ theme: 'dark', accentColor: '#1db954' })
+  const [beatVisualizer, setBeatVisualizer] = useState(true)
 
   const playbackApi = usePlayback(authed && !booting)
 
@@ -53,6 +54,7 @@ export default function App() {
     void (async () => {
       const settings = await window.spotiffy.settings.get()
       setTheme({ theme: settings.theme, accentColor: settings.accentColor })
+      setBeatVisualizer(settings.beatVisualizer !== false)
       try {
         const ok = await window.spotiffy.auth.grant()
         setAuthed(ok)
@@ -196,12 +198,16 @@ export default function App() {
         {view === 'settings' ? (
           <Settings
             onBack={() => setView('main')}
-            onThemeChange={(s) => setTheme({ theme: s.theme, accentColor: s.accentColor })}
+            onThemeChange={(s) => {
+              setTheme({ theme: s.theme, accentColor: s.accentColor })
+              setBeatVisualizer(s.beatVisualizer !== false)
+            }}
           />
         ) : (
           <>
             <Player
               api={playbackApi}
+              beatVisualizer={beatVisualizer}
               onOpenLyrics={() => {
                 if (track) setBottom('lyrics')
               }}

@@ -8,6 +8,7 @@ type AppSettings = {
   preventSleep: boolean
   theme: 'dark' | 'light'
   accentColor: string
+  beatVisualizer: boolean
 }
 
 const ACCENTS = ['#1db954', '#1e90ff', '#ff6b6b', '#f4a261', '#9b5de5', '#00bbf9']
@@ -75,6 +76,11 @@ export default function Settings({ onBack, onThemeChange }: Props) {
           label="Prevent sleep"
           value={settings.preventSleep}
           onChange={(v) => void update({ preventSleep: v })}
+        />
+        <Toggle
+          label="Beat visualizer"
+          value={settings.beatVisualizer !== false}
+          onChange={(v) => void update({ beatVisualizer: v })}
         />
 
         <div className="setting-row">

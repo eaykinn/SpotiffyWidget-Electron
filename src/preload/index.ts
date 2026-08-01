@@ -7,6 +7,7 @@ export type AppSettings = {
   preventSleep: boolean
   theme: 'dark' | 'light'
   accentColor: string
+  beatVisualizer: boolean
 }
 
 const api = {
