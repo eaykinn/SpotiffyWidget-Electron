@@ -818,6 +818,7 @@ export default function Library({
         }}
         onPlayTrack={(uri) => void onPlayTrack(uri)}
         onPlayTracks={(uris) => void onPlayTracks(uris)}
+        onPlayContext={(uri) => void onPlayContext(uri)}
       />
     )
   }

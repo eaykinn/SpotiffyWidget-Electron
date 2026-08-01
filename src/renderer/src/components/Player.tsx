@@ -62,6 +62,7 @@ export default function Player({
   const [scrubbing, setScrubbing] = useState(false)
   const [scrubMs, setScrubMs] = useState(0)
   const titleRef = useRef<HTMLHeadingElement>(null)
+  const titleWrapRef = useRef<HTMLDivElement>(null)
   const seekDisplay = scrubbing ? scrubMs : progress
 
   useEffect(() => {
@@ -75,11 +76,32 @@ export default function Player({
 
   useEffect(() => {
     const el = titleRef.current
-    if (!el) {
+    const wrap = titleWrapRef.current
+    if (!el || !wrap) {
       setTitleOverflow(false)
       return
     }
-    setTitleOverflow(el.scrollWidth > el.clientWidth + 1)
+
+    const measure = (): void => {
+      // Title is inline-block without max-width when measuring natural width
+      const shift = el.scrollWidth - wrap.clientWidth
+      const overflow = shift > 2
+      setTitleOverflow(overflow)
+      if (overflow) {
+        wrap.style.setProperty('--marquee-shift', `${shift}px`)
+        // ~28px/sec, clamped so short/long titles feel natural
+        const duration = Math.max(5, Math.min(22, shift / 28))
+        wrap.style.setProperty('--marquee-duration', `${duration}s`)
+      } else {
+        wrap.style.removeProperty('--marquee-shift')
+        wrap.style.removeProperty('--marquee-duration')
+      }
+    }
+
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(wrap)
+    return () => ro.disconnect()
   }, [trackName, trackKey])
 
   const commitVolume = (v: number): void => {
@@ -151,6 +173,7 @@ export default function Player({
         <div className="player__meta">
           <div className="player__title-row">
             <div
+              ref={titleWrapRef}
               className={`player__title-wrap ${titleOverflow ? 'player__title-wrap--overflow' : ''}`}
               key={trackKey}
             >

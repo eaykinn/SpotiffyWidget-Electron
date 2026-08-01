@@ -376,13 +376,18 @@ button:disabled {
   transform: translateX(3px);
 }
 
-.list-item img {
+.list-item img,
+.list-item__art-empty {
   width: 48px;
   height: 48px;
   border-radius: 8px;
   object-fit: cover;
-  background: var(--surface);
+  background: var(--surface-2, var(--surface));
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.list-item__art-empty {
+  box-shadow: none;
 }
 
 .list-item--compact {

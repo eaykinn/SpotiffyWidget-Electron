@@ -248,12 +248,11 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  mask-image: linear-gradient(90deg, #000 88%, transparent);
   animation: title-in 380ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.player__title-wrap--overflow:hover .player__title {
-  animation: title-marquee 9s linear infinite;
+.player__title-wrap--overflow {
+  mask-image: linear-gradient(90deg, transparent, #000 10px, #000 calc(100% - 14px), transparent);
 }
 
 .player__title {
@@ -262,18 +261,21 @@
   font-weight: 700;
   letter-spacing: -0.01em;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   line-height: 1.25;
   margin: 0;
   display: inline-block;
   max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .player__title-wrap--overflow .player__title {
-  text-overflow: clip;
   max-width: none;
-  padding-right: 24px;
+  overflow: visible;
+  text-overflow: clip;
+  padding-right: 28px;
+  will-change: transform;
+  animation: title-marquee var(--marquee-duration, 10s) linear infinite;
 }
 
 @keyframes title-in {
@@ -289,12 +291,12 @@
 
 @keyframes title-marquee {
   0%,
-  12% {
+  18% {
     transform: translateX(0);
   }
-  88%,
+  82%,
   100% {
-    transform: translateX(calc(-100% + 120px));
+    transform: translateX(calc(-1 * var(--marquee-shift, 0px)));
   }
 }
 
