@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { coverOf, spotify } from '../api/spotify'
 import { likesStore } from '../likes/likesStore'
+import { sortTracks, type TrackSortDir, type TrackSortKey } from '../lib/trackSort'
 import type { Artist, Track } from '../types/spotify'
 import { IconBack, IconPlay, IconViewCompact, IconViewNormal } from './Icons'
 import TrackCard from './TrackCard'
+import TrackSortBar from './TrackSortBar'
 
 type ArtistTab = 'top' | 'all'
 
@@ -49,6 +51,8 @@ export default function ArtistDetail({
   const [artist, setArtist] = useState<Artist>(seed)
   const [tab, setTab] = useState<ArtistTab>('top')
   const [query, setQuery] = useState('')
+  const [sortKey, setSortKey] = useState<TrackSortKey>('name')
+  const [sortDir, setSortDir] = useState<TrackSortDir>('asc')
   const [topTracks, setTopTracks] = useState<Track[]>([])
   const [allTracks, setAllTracks] = useState<Track[]>([])
   const [likedMap, setLikedMap] = useState<Record<string, boolean>>({})
@@ -139,13 +143,17 @@ export default function ArtistDetail({
   const popularity = artist.popularity ?? 0
 
   const sourceTracks = useMemo(() => {
+    let base: Track[]
     if (query.trim()) {
       // Search the current tab's pool only (All catalog loads only when All is opened).
-      const base = tab === 'all' && allTracks.length > 0 ? allTracks : topTracks
-      return base.filter((t) => matchesQuery(t, query))
+      base = (tab === 'all' && allTracks.length > 0 ? allTracks : topTracks).filter((t) =>
+        matchesQuery(t, query)
+      )
+    } else {
+      base = tab === 'top' ? topTracks : allTracks
     }
-    return tab === 'top' ? topTracks : allTracks
-  }, [query, tab, topTracks, allTracks])
+    return sortTracks(base, sortKey, sortDir)
+  }, [query, tab, topTracks, allTracks, sortKey, sortDir])
 
   const busy =
     (tab === 'top' && !query.trim() && loadingTracks) ||
@@ -228,6 +236,17 @@ export default function ArtistDetail({
           <IconPlay />
           <span>Play</span>
         </button>
+      </div>
+      <div className="list-toolbar list-toolbar--sort">
+        <TrackSortBar
+          sortKey={sortKey}
+          sortDir={sortDir}
+          showAdded={false}
+          onChange={(key, dir) => {
+            setSortKey(key)
+            setSortDir(dir)
+          }}
+        />
       </div>
 
       {error && (

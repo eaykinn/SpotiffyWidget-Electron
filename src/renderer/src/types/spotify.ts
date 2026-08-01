@@ -34,6 +34,8 @@ export interface Track {
   album: Album
   /** 30s MP3 preview — used for offline spectrum (Web Playback audio is DRM-locked) */
   preview_url?: string | null
+  /** ISO date when saved / added to a playlist (liked songs, playlists). */
+  added_at?: string
 }
 
 export interface Playlist {

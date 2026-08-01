@@ -1,5 +1,6 @@
 import { useState, type MouseEvent } from 'react'
 import { coverOf, formatMs, spotify } from '../api/spotify'
+import { formatAddedAt } from '../lib/trackSort'
 import { useTrackLiked } from '../likes/useTrackLiked'
 import type { Track } from '../types/spotify'
 import { IconAddQueue, IconHeart } from './Icons'
@@ -20,6 +21,7 @@ export default function TrackCard({ track, initialLiked = false, compact = false
   const album = track.album?.name ?? '—'
   const cover = coverOf(track.album?.images)
   const duration = formatMs(track.duration_ms ?? 0)
+  const added = formatAddedAt(track.added_at)
 
   const toggleLike = async (e: MouseEvent): Promise<void> => {
     e.stopPropagation()
@@ -60,7 +62,19 @@ export default function TrackCard({ track, initialLiked = false, compact = false
           <div className="track-card__title">{track.name}</div>
           <div className="track-card__sub">{artists}</div>
           {!compact && <div className="track-card__sub">{album}</div>}
-          <div className="track-card__duration">{duration}</div>
+          <div className="track-card__duration">
+            <span>{duration}</span>
+            {added && (
+              <>
+                <span className="track-card__meta-sep" aria-hidden>
+                  ·
+                </span>
+                <span className="track-card__added" title={`Added ${added}`}>
+                  {added}
+                </span>
+              </>
+            )}
+          </div>
         </div>
       </button>
 

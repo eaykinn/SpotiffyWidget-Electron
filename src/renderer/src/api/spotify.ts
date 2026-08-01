@@ -172,7 +172,9 @@ export const spotify = {
     while (offset < total) {
       const page = await this.getSavedTracksPage(50, offset)
       total = page.total
-      const tracks = page.items.map((s) => s.track).filter(Boolean)
+      const tracks = page.items
+        .filter((s) => s?.track)
+        .map((s) => ({ ...s.track, added_at: s.added_at }))
       all.push(...tracks)
       offset += page.items.length
       onPage?.(tracks, all.length, total)
@@ -343,10 +345,12 @@ export const spotify = {
     limit = 50,
     offset = 0
   ): Promise<{ items: Track[]; total: number; next: string | null }> {
-    const data = await request<Paging<{ track: Track | null }>>(
+    const data = await request<Paging<{ added_at?: string; track: Track | null }>>(
       `/playlists/${id}/tracks?limit=${Math.min(limit, 50)}&offset=${offset}`
     )
-    const items = (data?.items ?? []).map((i) => i.track).filter(Boolean) as Track[]
+    const items = (data?.items ?? [])
+      .filter((i): i is { added_at?: string; track: Track } => Boolean(i?.track))
+      .map((i) => ({ ...i.track, added_at: i.added_at }))
     return {
       items,
       total: data?.total ?? items.length,

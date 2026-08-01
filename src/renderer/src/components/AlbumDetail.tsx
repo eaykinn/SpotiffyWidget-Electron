@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { coverOf, spotify } from '../api/spotify'
 import { likesStore } from '../likes/likesStore'
+import { sortTracks, type TrackSortDir, type TrackSortKey } from '../lib/trackSort'
 import type { Album, Track } from '../types/spotify'
 import { IconBack, IconPlay, IconViewCompact, IconViewNormal } from './Icons'
 import TrackCard from './TrackCard'
+import TrackSortBar from './TrackSortBar'
 
 interface Props {
   album: Album
@@ -46,6 +48,8 @@ export default function AlbumDetail({
   const [tracks, setTracks] = useState<Track[]>([])
   const [likedMap, setLikedMap] = useState<Record<string, boolean>>({})
   const [query, setQuery] = useState('')
+  const [sortKey, setSortKey] = useState<TrackSortKey>('name')
+  const [sortDir, setSortDir] = useState<TrackSortDir>('asc')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -86,10 +90,10 @@ export default function AlbumDetail({
     ? album.album_type.charAt(0).toUpperCase() + album.album_type.slice(1)
     : 'Album'
 
-  const visible = useMemo(
-    () => (query.trim() ? tracks.filter((t) => matchesQuery(t, query)) : tracks),
-    [tracks, query]
-  )
+  const visible = useMemo(() => {
+    const filtered = query.trim() ? tracks.filter((t) => matchesQuery(t, query)) : tracks
+    return sortTracks(filtered, sortKey, sortDir)
+  }, [tracks, query, sortKey, sortDir])
 
   return (
     <div className="glow-card artist-detail">
@@ -148,12 +152,23 @@ export default function AlbumDetail({
           title="Play album"
           onClick={() => {
             if (album.uri) void onPlayContext(album.uri)
-            else void onPlayTracks(tracks.map((t) => t.uri))
+            else void onPlayTracks(visible.map((t) => t.uri))
           }}
         >
           <IconPlay />
           <span>Play</span>
         </button>
+      </div>
+      <div className="list-toolbar list-toolbar--sort">
+        <TrackSortBar
+          sortKey={sortKey}
+          sortDir={sortDir}
+          showAdded={false}
+          onChange={(key, dir) => {
+            setSortKey(key)
+            setSortDir(dir)
+          }}
+        />
       </div>
 
       {error && (

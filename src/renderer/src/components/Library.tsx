@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { coverOf, spotify } from '../api/spotify'
 import { likesStore } from '../likes/likesStore'
+import { sortTracks, type TrackSortDir, type TrackSortKey } from '../lib/trackSort'
 import type { Album, Artist, Playlist, Track } from '../types/spotify'
 import AlbumDetail from './AlbumDetail'
 import ArtistDetail from './ArtistDetail'
 import { IconBack, IconPlay, IconViewCompact, IconViewNormal } from './Icons'
 import TrackCard from './TrackCard'
+import TrackSortBar from './TrackSortBar'
 
 const COMPACT_KEY = 'spotiffy.listCompact'
 
@@ -128,6 +130,8 @@ export default function Library({
   const [tab, setTab] = useState<Tab>('tracks')
   const [trackMode, setTrackMode] = useState<TrackMode>('liked')
   const [query, setQuery] = useState('')
+  const [trackSortKey, setTrackSortKey] = useState<TrackSortKey>('added')
+  const [trackSortDir, setTrackSortDir] = useState<TrackSortDir>('desc')
   const [tracks, setTracks] = useState<Track[]>([])
   const [likedMap, setLikedMap] = useState<Record<string, boolean>>({})
   const [artists, setArtists] = useState<Artist[]>([])
@@ -276,7 +280,9 @@ export default function Library({
     if (trackMode === 'liked' && !query.trim()) {
       const page = await spotify.getSavedTracksPage(PAGE, offset)
       return {
-        items: page.items.map((s) => s.track).filter(Boolean),
+        items: page.items
+          .filter((s) => s?.track)
+          .map((s) => ({ ...s.track, added_at: s.added_at })),
         total: page.total,
         next: page.next
       }
@@ -477,7 +483,9 @@ export default function Library({
         if (gen !== fetchGen.current) return likedLibraryRef.current
         const page = await spotify.getSavedTracksPage(PAGE, offset)
         total = page.total
-        const tracks = page.items.map((s) => s.track).filter(Boolean)
+        const tracks = page.items
+          .filter((s) => s?.track)
+          .map((s) => ({ ...s.track, added_at: s.added_at }))
         all = mergeTracks(all, tracks)
         offset = all.length
         likedLibraryRef.current = all
@@ -734,6 +742,34 @@ export default function Library({
     </button>
   )
 
+  const sortedTracks = useMemo(
+    () => sortTracks(tracks, trackSortKey, trackSortDir),
+    [tracks, trackSortKey, trackSortDir]
+  )
+  const sortedDetailTracks = useMemo(
+    () => sortTracks(detailTracks, trackSortKey, trackSortDir),
+    [detailTracks, trackSortKey, trackSortDir]
+  )
+
+  useEffect(() => {
+    if (trackMode === 'liked') {
+      setTrackSortKey('added')
+      setTrackSortDir('desc')
+    } else {
+      setTrackSortKey('name')
+      setTrackSortDir('asc')
+    }
+  }, [trackMode])
+
+  const onTrackSortChange = (key: TrackSortKey, dir: TrackSortDir): void => {
+    setTrackSortKey(key)
+    setTrackSortDir(dir)
+  }
+
+  const trackSortBar = (
+    <TrackSortBar sortKey={trackSortKey} sortDir={trackSortDir} onChange={onTrackSortChange} />
+  )
+
   const playAllButton = (items: Track[], contextUri?: string): ReactNode => (
     <button
       type="button"
@@ -825,7 +861,7 @@ export default function Library({
               <IconBack /> Back
             </button>
             <div className="detail-header__actions">
-              {playAllButton(detailTracks, playlistUri)}
+              {playAllButton(sortedDetailTracks, playlistUri)}
               {viewToggle}
             </div>
           </div>
@@ -835,11 +871,12 @@ export default function Library({
               {detailCount} track{detailCount === 1 ? '' : 's'}
             </p>
           )}
+          <div className="list-toolbar list-toolbar--sort">{trackSortBar}</div>
         </div>
         <div className="scroll" ref={scrollRef}>
           {loading && detailTracks.length === 0 && <div className="empty">Loading…</div>}
           {!(loading && detailTracks.length === 0) &&
-            renderTrackList(detailTracks, detailLikedMap, showSentinel)}
+            renderTrackList(sortedDetailTracks, detailLikedMap, showSentinel)}
         </div>
       </div>
     )
@@ -904,9 +941,10 @@ export default function Library({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {tab === 'tracks' && playAllButton(tracks)}
+        {tab === 'tracks' && playAllButton(sortedTracks)}
         {viewToggle}
       </div>
+      {tab === 'tracks' && <div className="list-toolbar list-toolbar--sort">{trackSortBar}</div>}
 
       <div className="scroll" ref={scrollRef}>
         {listError && (
@@ -924,7 +962,7 @@ export default function Library({
         )}
         {tab === 'tracks' &&
           !(loading && tracks.length === 0) &&
-          renderTrackList(tracks, likedMap, showSentinel)}
+          renderTrackList(sortedTracks, likedMap, showSentinel)}
         {tab === 'artists' && !(loading && artists.length === 0) && (
           <div className={`list ${compact ? 'list--compact' : ''}`}>
             {artists.map((a) => (

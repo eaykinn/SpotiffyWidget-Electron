@@ -500,11 +500,66 @@ button:disabled {
 }
 
 .track-card__duration {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 5px;
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   margin-top: 1px;
+}
+
+.track-card__meta-sep {
+  opacity: 0.55;
+}
+
+.track-card__added {
+  font-weight: 500;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.track-sort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.track-sort__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.track-sort__btn:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.track-sort__btn.active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--accent-soft);
+}
+
+.track-sort__dir {
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
 }
 
 .track-card__actions {
@@ -958,6 +1013,11 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.list-toolbar--sort {
+  margin-top: 2px;
+  padding: 0 2px 2px;
 }
 
 .list-toolbar .search {
