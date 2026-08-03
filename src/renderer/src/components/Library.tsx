@@ -5,7 +5,7 @@ import { sortTracks, type TrackSortDir, type TrackSortKey } from '../lib/trackSo
 import type { Album, Artist, Playlist, Track } from '../types/spotify'
 import AlbumDetail from './AlbumDetail'
 import ArtistDetail from './ArtistDetail'
-import { IconBack, IconPlay, IconViewCompact, IconViewNormal } from './Icons'
+import { IconBack, IconPlay, IconRefresh, IconViewCompact, IconViewNormal } from './Icons'
 import TrackCard from './TrackCard'
 import TrackSortBar from './TrackSortBar'
 
@@ -46,6 +46,12 @@ function syncLikedSession(tracks: Track[], complete: boolean, total?: number): v
   likedSession.tracks = tracks
   likedSession.complete = complete
   if (typeof total === 'number') likedSession.total = total
+}
+
+function clearLikedSession(): void {
+  likedSession.tracks = []
+  likedSession.complete = false
+  likedSession.total = 0
 }
 
 async function resolveLikedMap(tracks: Track[], assumeAllLiked = false): Promise<Record<string, boolean>> {
@@ -670,6 +676,31 @@ export default function Library({
     setDetailLikedMap(await resolveLikedMap(next))
   }
 
+  async function refreshCurrent(): Promise<void> {
+    if (loading || searchingLibrary) return
+
+    if (detail.kind === 'playlist') {
+      await openPlaylist(detail.playlist)
+      return
+    }
+    if (detail.kind === 'queue') {
+      setLoading(true)
+      try {
+        await openQueue()
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+    if (detail.kind !== 'none') return
+
+    // Drop session caches so Liked / Top / Mine re-fetch from Spotify
+    clearLikedSession()
+    clearMainPaging()
+    setLikedMap({})
+    await loadTab()
+  }
+
   const searchPlaceholder = useMemo(() => {
     if (tab === 'tracks' && trackMode === 'liked') return 'Search liked songs…'
     if (tab === 'artists') return 'Search all artists…'
@@ -739,6 +770,18 @@ export default function Library({
       title={compact ? 'Normal view' : 'Compact view'}
     >
       {compact ? <IconViewNormal /> : <IconViewCompact />}
+    </button>
+  )
+
+  const refreshButton = (
+    <button
+      type="button"
+      className={`icon-btn list-view-toggle ${loading || searchingLibrary ? 'is-busy' : ''}`}
+      onClick={() => void refreshCurrent()}
+      disabled={loading || searchingLibrary}
+      title="Refresh list"
+    >
+      <IconRefresh />
     </button>
   )
 
@@ -862,6 +905,7 @@ export default function Library({
               <IconBack /> Back
             </button>
             <div className="detail-header__actions">
+              {refreshButton}
               {playAllButton(sortedDetailTracks, playlistUri)}
               {viewToggle}
             </div>
@@ -943,6 +987,7 @@ export default function Library({
           onChange={(e) => setQuery(e.target.value)}
         />
         {tab === 'tracks' && playAllButton(sortedTracks)}
+        {refreshButton}
         {viewToggle}
       </div>
       {tab === 'tracks' && <div className="list-toolbar list-toolbar--sort">{trackSortBar}</div>}

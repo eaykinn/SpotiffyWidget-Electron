@@ -1035,6 +1035,17 @@ button:disabled {
   height: 32px;
 }
 
+.list-toolbar .list-view-toggle.is-busy svg,
+.detail-header__actions .list-view-toggle.is-busy svg {
+  animation: refresh-spin 0.8s linear infinite;
+}
+
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .list-toolbar .btn-play-all {
   height: 32px;
   padding: 0 10px;
